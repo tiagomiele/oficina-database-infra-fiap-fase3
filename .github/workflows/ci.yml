@@ -18,6 +18,8 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Validate required documentation
         run: |
           test -f README.md
