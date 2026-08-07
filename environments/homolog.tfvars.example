@@ -16,7 +16,7 @@ db_allocated_storage     = 20
 db_max_allocated_storage = 40
 multi_az                  = false
 backup_retention_days     = 7
-delection_protection      = false
+deletion_protection       = false
 skip_final_snapshot       = true
 
 # db_password deve ser cadastrada como variável sensível no HCP Terraform.
