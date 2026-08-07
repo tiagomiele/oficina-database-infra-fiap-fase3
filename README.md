@@ -22,7 +22,7 @@ flowchart LR
     TF[HCP Terraform] --> RDS
 ```
 
-## Tecnologias planejadas
+## Tecnologias
 
 - Terraform e HCP Terraform;
 - Amazon RDS PostgreSQL 16;
@@ -31,13 +31,21 @@ flowchart LR
 
 ## Validação
 
-A infraestrutura será implementada na Semana 2. O CI inicial protege a documentação e será ampliado com validação Terraform e análise de segurança.
+```bash
+terraform fmt -check -recursive
+terraform init -backend=false -input=false
+terraform validate
+```
+
+O CI também executa TFLint, Trivy e Gitleaks. O plan real é manual e utiliza HCP Terraform; nenhum workflow executa apply automático.
 
 ## Documentação
 
 - [Arquitetura](docs/architecture.md)
 - [Modelo de dados e responsabilidades](docs/data-model.md)
 - [AWS Academy](docs/aws-academy.md)
+- [HCP Terraform e execução](docs/hcp-terraform.md)
+- [Validação](docs/validation.md)
 - [Repositórios da solução](docs/repositories.md)
 
 ## Contribuição
