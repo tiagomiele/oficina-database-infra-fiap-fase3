@@ -41,6 +41,33 @@ jobs:
       - name: Terraform validate
         run: terraform validate -no-color
 
+      - name: Validate example variable names
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          variables = set(
+              re.findall(
+                  r'^variable\s+"([a-zA-Z0-9_]+)"',
+                  Path('variables.tf').read_text(encoding='utf-8'),
+                  re.MULTILINE,
+              )
+          )
+
+          for path in Path('environments').glob('*.tfvars.example'):
+              assigned = set(
+                  re.findall(
+                      r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*=',
+                      path.read_text(encoding='utf-8'),
+                      re.MULTILINE,
+                  )
+              )
+              unknown = sorted(assigned - variables)
+              if unknown:
+                  raise SystemExit(f'{path}: undeclared variables: {unknown}')
+          PY
+
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v4
 
