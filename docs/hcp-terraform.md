@@ -51,12 +51,14 @@ Em cada GitHub Environment (`homolog` e `production`), configure:
 
 O workflow **Terraform plan** é manual. Ele seleciona o workspace pelo ambiente e envia o plan para execução remota no HCP Terraform.
 
+O `workflow_dispatch` só aparece no GitHub Actions depois que o arquivo do workflow existe na branch padrão `main`. No primeiro bootstrap, promova o workflow até `main` ou execute o plan pela CLI com `TF_CLOUD_ORGANIZATION` e `TF_WORKSPACE`; em ambos os casos, mantenha Auto apply desativado.
+
 ## Ordem segura
 
 1. mantenha a sessão AWS Academy ativa;
 2. renove as três credenciais AWS no workspace;
 3. copie os outputs da infraestrutura Kubernetes;
-4. execute **Actions → Terraform plan → Run workflow**;
+4. execute **Actions → Terraform plan → Run workflow**, selecionando `homolog`, ou use a CLI no primeiro bootstrap;
 5. revise recursos, alterações e outputs;
 6. somente depois de aprovação explícita, confirme o apply no HCP Terraform;
 7. colete evidências antes de encerrar o laboratório;
