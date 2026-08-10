@@ -64,7 +64,7 @@ Os comandos completos estão em [`observability.md`](observability.md).
 | Evidência | Como obter | Artefato |
 |---|---|---|
 | backend conectado | log do pod no EKS mostrando Flyway aplicado | log |
-| migrations aplicadas | `SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;` | resultado com `V1`, `V2` e `V3` |
+| migrations aplicadas | `SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;` | resultado com `V1`, `V2`, `V3` e `V4` |
 | modelo real | comparação do resultado de `\dt` com [`data-model.md`](data-model.md) | lista de 14 tabelas |
 | índices reais | `SELECT indexname, tablename FROM pg_indexes WHERE schemaname = 'public' ORDER BY tablename;` | comparação com [`index-review.md`](index-review.md) |
 | login por CPF | chamada à Lambda de autenticação | resposta com token |

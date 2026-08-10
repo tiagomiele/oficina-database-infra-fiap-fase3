@@ -1,6 +1,6 @@
 # Revisão estática de índices e consultas
 
-Revisão feita sobre as migrations `V1`, `V2` e `V3` e sobre os repositórios de
+Revisão feita sobre as migrations `V1`, `V2`, `V3` e `V4` e sobre os repositórios de
 persistência do backend, sem executar `EXPLAIN` em banco real. Nenhuma migration é
 criada neste repositório: alterações de schema pertencem ao Flyway do backend.
 
@@ -13,26 +13,24 @@ criada neste repositório: alterações de schema pertencem ao Flyway do backend
 | veículos do cliente | `SpringDataVeiculoRepository.findByIdCliente` | `id_cliente = ?` | `idx_veiculos_cliente` | adequado |
 | OS ativa por cliente | `existeOsAtivaPorCliente` | `id_cliente = ? AND status IN (5 status ativos)` | `idx_os_cliente` | melhorável |
 | OS ativa por veículo | `existeOsAtivaPorVeiculo` | `id_placa = ? AND id_cliente = ? AND status IN (...)` | `idx_os_cliente` | melhorável |
-| OS ativa por serviço/SKU | `existeOsAtivaPorServicoSku` | `i.id_servico_sku = ? AND i.tipo_item = ? AND i.status <> 'CANCELADO'` + join com OS ativa | nenhum (`Seq Scan` em `orcamentos_itens_ordem_servico`) | **falta índice** |
+| OS ativa por serviço/SKU | `existeOsAtivaPorServicoSku` | `i.id_servico_sku = ? AND i.tipo_item = ? AND i.status <> 'CANCELADO'` + join com OS ativa | `idx_itens_orc_servico_sku` (V4) | implementado |
 | etapa aberta da OS | `findFirstByIdOrdemServicoAndSaidaEmIsNullOrderByEntradaEmDesc` | `id_ordem_servico = ? AND saida_em IS NULL` | `ux_historico_os_status_aberto` (único parcial) | adequado |
 | histórico da OS | `findByIdOrdemServicoOrderByEntradaEmAsc` | `id_ordem_servico = ?` ordenado por `entrada_em` | `idx_historico_os_entrada` | adequado |
 | tempo médio de execução | `JpaRelatorioRepository.tempoMedioPorOs` | `inicio_execucao IS NOT NULL AND fim_execucao IS NOT NULL` ordenado por `fim_execucao` | nenhum (`Seq Scan` em `ordens_servico`) | aceitável hoje, ver abaixo |
-| lançamentos por tipo | `findByTipoOrderByDataLancamentoDesc` | `tipo = ?` ordenado por `data_lancamento DESC` | `idx_cc_tipo` | melhorável |
-| lançamento por NF | `findByNumeroNotaAndSerieNotaAndCnpjFornecedorAndDataEmissao` | 4 colunas de correlação | nenhum | **falta índice** |
+| lançamentos por tipo | `findByTipoOrderByDataLancamentoDesc` | `tipo = ?` ordenado por `data_lancamento DESC` | `idx_cc_tipo_data` (V4) | implementado |
+| lançamento por NF | `findByNumeroNotaAndSerieNotaAndCnpjFornecedorAndDataEmissao` | 4 colunas de correlação | `idx_cc_nota_fornecedor` (V4) | implementado |
 | numerador da OS | `SpringDataNumeroOSSequenciaRepository` | `mes = ? AND ano = ?` com `FOR UPDATE` | PK composta | adequado |
 | itens do orçamento atual | `orcamentos_itens_ordem_servico` por OS e orçamento | `id_ordem_servico = ? AND id_orcamento = ?` | `idx_itens_orc_os` | adequado |
 | movimentação por SKU / por OS | `movimentacao_estoque_pecas` | `id_sku = ?`, `id_ordem_servico = ?` | `idx_mov_estoque_sku`, `idx_mov_estoque_os` | adequado |
 
-## Índices recomendados — exigem migration no backend
+## Índices implementados no backend
 
-Os itens abaixo **não** são criados aqui. Precisam de uma migration Flyway
-(`V4__indices_de_consulta.sql` ou equivalente) no repositório
-`oficina-backend-fiap-fase3`.
+A migration Flyway `V4__indices_de_consulta.sql` do repositório
+`oficina-backend-fiap-fase3` implementa os três índices prioritários abaixo. O schema continua sendo responsabilidade da aplicação, não deste repositório.
 
-1. `orcamentos_itens_ordem_servico (id_servico_sku, tipo_item)` — hoje a verificação
-   de vínculo ativo de serviço ou peça varre a tabela inteira antes do join. É a
-   consulta com pior perfil do modelo atual, e roda a cada tentativa de inativar
-   serviço ou peça.
+1. `orcamentos_itens_ordem_servico (id_servico_sku, tipo_item)` — suporta a
+   verificação de vínculo ativo executada a cada tentativa de inativar serviço ou
+   peça, evitando a varredura completa da tabela de itens.
 
    ```sql
    CREATE INDEX idx_itens_orc_servico_sku
@@ -48,17 +46,19 @@ Os itens abaixo **não** são criados aqui. Precisam de uma migration Flyway
    ```
 
 3. `conta_corrente_oficina (tipo, data_lancamento DESC)` — substitui `idx_cc_tipo` na
-   listagem ordenada por data, eliminando o `Sort` posterior.
+   listagem ordenada por data; a V4 remove o índice antigo redundante.
 
    ```sql
    CREATE INDEX idx_cc_tipo_data ON conta_corrente_oficina (tipo, data_lancamento DESC);
    ```
 
-4. `ordens_servico (id_cliente, status)` e `ordens_servico (id_placa, id_cliente, status)`
+## Índices futuros condicionados a volume
+
+1. `ordens_servico (id_cliente, status)` e `ordens_servico (id_placa, id_cliente, status)`
    — tornam as verificações de OS ativa cobertas pelo índice. Ganho moderado enquanto o
    volume é baixo; recomendável quando a listagem operacional crescer.
 
-5. `ordens_servico (fim_execucao)` parcial, para o relatório de tempo médio:
+2. `ordens_servico (fim_execucao)` parcial, para o relatório de tempo médio:
 
    ```sql
    CREATE INDEX idx_os_execucao_concluida
