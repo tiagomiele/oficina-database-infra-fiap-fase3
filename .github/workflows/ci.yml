@@ -21,13 +21,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate required documentation
-        run: |
-          test -f README.md
-          test -f docs/architecture.md
-          test -f docs/data-model.md
-          test -f docs/aws-academy.md
-          test -f docs/hcp-terraform.md
+      - name: Validate documentation and ER diagram
+        run: python3 scripts/validate_docs.py
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -68,11 +63,34 @@ jobs:
                   raise SystemExit(f'{path}: undeclared variables: {unknown}')
           PY
 
+      - name: Ensure no IAM resource is declared
+        run: |
+          if grep -rnE '^resource\s+"aws_iam_' --include='*.tf' .; then
+            echo "::error::Este repositório não pode criar recursos IAM no AWS Academy."
+            exit 1
+          fi
+
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v4
 
       - name: TFLint
         run: tflint --recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Checkov
+        run: |
+          pip install --quiet checkov==3.3.9
+          # Verificações ignoradas de propósito, documentadas em docs/validation.md:
+          # CKV_AWS_158 log group com KMS, CKV_AWS_338 retenção de 1 ano,
+          # CKV_AWS_293 deletion protection, CKV_AWS_157 Multi-AZ,
+          # CKV_AWS_353 Performance Insights, CKV_AWS_161 autenticação IAM,
+          # CKV_AWS_118 Enhanced Monitoring.
+          checkov -d . --compact --quiet --framework terraform \
+            --skip-check CKV_AWS_158,CKV_AWS_338,CKV_AWS_293,CKV_AWS_157,CKV_AWS_353,CKV_AWS_161,CKV_AWS_118
 
       - name: Trivy infrastructure scan
         uses: aquasecurity/trivy-action@0.35.0

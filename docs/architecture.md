@@ -12,6 +12,7 @@ Este repositório provisiona o RDS PostgreSQL em subnets privadas da VPC criada 
 - armazenamento `gp3` com autoscaling limitado;
 - backup, janela de manutenção e parâmetros de log;
 - SSL obrigatório pelo parameter group;
+- log groups do CloudWatch com retenção definida;
 - outputs não sensíveis para integração.
 
 ## Estados
@@ -24,4 +25,18 @@ Homologação e produção utilizam workspaces/estados HCP Terraform independent
 - senha fornecida como variável sensível;
 - tráfego liberado somente para origens autorizadas;
 - outputs não exibem senha;
-- destroy e snapshots seguirão a estratégia do ambiente acadêmico.
+- destroy e snapshots seguem a estratégia do ambiente acadêmico ([ADR 0006](adr/0006-backup-e-retencao.md));
+- log conservador, sem parâmetros de bind e sem SQL de dados ([observabilidade](observability.md)).
+
+## Observabilidade
+
+Os logs do PostgreSQL vão para o CloudWatch Logs, com retenção curta e parâmetros
+escolhidos para evidenciar conectividade e consulta lenta sem gravar dado pessoal.
+Performance Insights e Enhanced Monitoring ficam desligados por padrão. Detalhes em
+[`observability.md`](observability.md) e no [ADR 0003](adr/0003-observabilidade-rds.md).
+
+## Decisões
+
+O racional das escolhas está registrado nos [ADRs](adr/README.md): banco gerenciado,
+modelagem relacional, observabilidade, restrições do AWS Academy, separação de
+ambientes, backup e retenção, custo e gate de apply.
