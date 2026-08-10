@@ -154,6 +154,111 @@ variable "skip_final_snapshot" {
   default     = true
 }
 
+variable "enabled_cloudwatch_logs_exports" {
+  description = "Logs do PostgreSQL exportados para o CloudWatch Logs. Use [] para desligar completamente."
+  type        = list(string)
+  default     = ["postgresql"]
+
+  validation {
+    condition = (
+      length(distinct(var.enabled_cloudwatch_logs_exports)) == length(var.enabled_cloudwatch_logs_exports) &&
+      alltrue([for log in var.enabled_cloudwatch_logs_exports : contains(["postgresql", "upgrade"], log)])
+    )
+    error_message = "enabled_cloudwatch_logs_exports aceita somente os valores distintos postgresql e upgrade."
+  }
+}
+
+variable "manage_cloudwatch_log_groups" {
+  description = "Cria os log groups pelo Terraform para aplicar retenção e limitar custo do CloudWatch."
+  type        = bool
+  default     = true
+}
+
+variable "cloudwatch_logs_retention_days" {
+  description = "Retenção dos logs do banco no CloudWatch Logs."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365], var.cloudwatch_logs_retention_days)
+    error_message = "cloudwatch_logs_retention_days deve ser um valor de retenção aceito pelo CloudWatch Logs."
+  }
+}
+
+variable "log_connections" {
+  description = "Registra conexões. Mantido ativo para evidenciar acesso do EKS e da Lambda."
+  type        = bool
+  default     = true
+}
+
+variable "log_disconnections" {
+  description = "Registra desconexões, complementando a evidência de conectividade."
+  type        = bool
+  default     = true
+}
+
+variable "log_min_duration_statement_ms" {
+  description = "Duração mínima, em milissegundos, para registrar consultas lentas. Use -1 para desativar."
+  type        = number
+  default     = 1000
+
+  validation {
+    condition     = var.log_min_duration_statement_ms >= -1
+    error_message = "log_min_duration_statement_ms deve ser -1 ou um valor maior ou igual a zero."
+  }
+}
+
+variable "log_statement" {
+  description = "Escopo de SQL registrado. Mantido em ddl para não gravar dados pessoais no log."
+  type        = string
+  default     = "ddl"
+
+  validation {
+    condition     = contains(["none", "ddl", "mod", "all"], var.log_statement)
+    error_message = "log_statement deve ser none, ddl, mod ou all."
+  }
+}
+
+variable "performance_insights_enabled" {
+  description = "Ativa o Performance Insights. Desligado por padrão para controlar custo no AWS Academy."
+  type        = bool
+  default     = false
+}
+
+variable "performance_insights_retention_period" {
+  description = "Retenção do Performance Insights em dias. Somente 7 permanece na camada gratuita."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = var.performance_insights_retention_period == 7 || var.performance_insights_retention_period == 731 || (var.performance_insights_retention_period % 31 == 0 && var.performance_insights_retention_period <= 713)
+    error_message = "performance_insights_retention_period deve ser 7, 731 ou múltiplo de 31 até 713."
+  }
+}
+
+variable "monitoring_interval" {
+  description = "Intervalo do Enhanced Monitoring em segundos. Exige monitoring_role_arn existente."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = contains([0, 1, 5, 10, 15, 30, 60], var.monitoring_interval)
+    error_message = "monitoring_interval deve ser 0, 1, 5, 10, 15, 30 ou 60."
+  }
+}
+
+variable "monitoring_role_arn" {
+  description = "ARN de role já existente para Enhanced Monitoring. Nulo no AWS Academy, onde não criamos roles IAM."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.monitoring_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.monitoring_role_arn))
+    error_message = "monitoring_role_arn deve ser nulo ou um ARN de role IAM válido."
+  }
+}
+
 variable "final_snapshot_identifier" {
   description = "Nome do snapshot final quando skip_final_snapshot for false."
   type        = string
