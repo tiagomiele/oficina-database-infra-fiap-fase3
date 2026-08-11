@@ -1,4 +1,4 @@
-name: Terraform plan
+name: Terraform apply
 
 on:
   workflow_dispatch:
@@ -11,13 +11,53 @@ on:
         options:
           - homolog
           - production
+      action:
+        description: Operação a executar
+        required: true
+        default: apply
+        type: choice
+        options:
+          - apply
+          - destroy
+      confirm:
+        description: Digite APPLY-<ambiente> ou DESTROY-<ambiente> para confirmar
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: terraform-apply-${{ inputs.environment }}
+  cancel-in-progress: false
+
 jobs:
-  plan:
-    name: Plan (${{ inputs.environment }})
+  gate:
+    name: Gate (${{ inputs.action }} ${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      ENABLE_TERRAFORM_APPLY: ${{ vars.ENABLE_TERRAFORM_APPLY }}
+      EXPECTED_CONFIRMATION: ${{ inputs.action == 'apply' && format('APPLY-{0}', inputs.environment) || format('DESTROY-{0}', inputs.environment) }}
+      PROVIDED_CONFIRMATION: ${{ inputs.confirm }}
+    steps:
+      - name: Require explicit enable flag
+        run: |
+          if [ "$ENABLE_TERRAFORM_APPLY" != "true" ]; then
+            echo "::error::A variable ENABLE_TERRAFORM_APPLY do ambiente ${{ inputs.environment }} precisa valer 'true' para executar ${{ inputs.action }}."
+            exit 1
+          fi
+
+      - name: Require typed confirmation
+        run: |
+          if [ "$PROVIDED_CONFIRMATION" != "$EXPECTED_CONFIRMATION" ]; then
+            echo "::error::Confirmação inválida. Era esperado exatamente '$EXPECTED_CONFIRMATION'."
+            exit 1
+          fi
+
+  terraform:
+    name: Terraform ${{ inputs.action }} (${{ inputs.environment }})
+    needs: gate
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     env:
@@ -64,4 +104,20 @@ jobs:
         run: terraform init -input=false
 
       - name: Terraform plan
-        run: terraform plan -input=false -no-color
+        run: |
+          if [ "${{ inputs.action }}" = "destroy" ]; then
+            terraform plan -destroy -input=false -no-color
+          else
+            terraform plan -input=false -no-color
+          fi
+
+      - name: Terraform apply
+        if: inputs.action == 'apply'
+        run: terraform apply -input=false -auto-approve -no-color
+
+      - name: Terraform destroy
+        if: inputs.action == 'destroy'
+        run: terraform destroy -input=false -auto-approve -no-color
+
+      - name: Outputs sem credenciais
+        run: terraform output -no-color

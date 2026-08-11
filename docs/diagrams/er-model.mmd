@@ -1,0 +1,184 @@
+%% Modelo entidade-relacionamento real do banco da oficina.
+%% Fonte: migrations Flyway V1, V2 e V3 do repositório oficina-backend-fiap-fase3.
+%% Este arquivo é a fonte versionada do diagrama. A imagem docs/diagrams/er-model.svg
+%% é gerada a partir dele com: npm run diagram
+erDiagram
+    users {
+        UUID id PK
+        VARCHAR email UK
+        VARCHAR senha_hash
+        VARCHAR papel
+        BOOLEAN ativo
+        BIGINT versao
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
+    }
+
+    clientes {
+        BIGSERIAL id_cliente PK
+        VARCHAR nome
+        VARCHAR documento UK
+        VARCHAR tipo_documento
+        VARCHAR documento_normalizado UK
+        VARCHAR email
+        VARCHAR telefone
+        BOOLEAN ativo
+        BIGINT versao
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
+    }
+
+    veiculos {
+        VARCHAR id_placa PK
+        BIGINT id_cliente PK,FK
+        VARCHAR marca
+        VARCHAR modelo
+        INTEGER ano
+        BOOLEAN ativo
+        BIGINT versao
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
+    }
+
+    servicos {
+        BIGSERIAL id_servico PK
+        VARCHAR nome
+        VARCHAR descricao
+        NUMERIC preco_base
+        BOOLEAN ativo
+        BIGINT versao
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
+    }
+
+    pecas {
+        BIGSERIAL id_sku PK
+        VARCHAR nome
+        NUMERIC preco_venda
+        BOOLEAN ativo
+        BIGINT versao
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
+    }
+
+    estoque_pecas {
+        BIGINT id_sku PK,FK
+        INTEGER quantidade
+        TIMESTAMPTZ data_hora
+    }
+
+    movimentacao_estoque_pecas {
+        BIGSERIAL id PK
+        BIGINT id_sku FK
+        INTEGER quantidade
+        VARCHAR origem
+        VARCHAR numero_nota
+        VARCHAR serie_nota
+        VARCHAR cnpj_fornecedor
+        DATE data_emissao
+        VARCHAR id_ordem_servico
+        INTEGER id_orcamento
+        INTEGER id_orcamento_item
+        TIMESTAMPTZ data_hora
+    }
+
+    notas_fiscais_fornecedor {
+        VARCHAR numero_nota PK
+        VARCHAR serie_nota PK
+        VARCHAR cnpj_fornecedor PK
+        DATE data_emissao PK
+        VARCHAR nome_fornecedor
+        NUMERIC valor_total
+        BOOLEAN estornada
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
+    }
+
+    itens_nota_fiscal_fornecedor {
+        VARCHAR numero_nota PK,FK
+        VARCHAR serie_nota PK,FK
+        VARCHAR cnpj_fornecedor PK,FK
+        DATE data_emissao PK,FK
+        BIGINT id_sku PK,FK
+        INTEGER quantidade
+        NUMERIC preco_unitario
+    }
+
+    numero_os_sequencia {
+        INTEGER mes PK
+        INTEGER ano PK
+        INTEGER ultimo_numero
+    }
+
+    ordens_servico {
+        VARCHAR id_ordem_servico PK
+        BIGINT id_cliente FK
+        VARCHAR id_placa FK
+        VARCHAR status
+        VARCHAR descricao_problema
+        NUMERIC valor_total_conserto
+        VARCHAR motivo_rejeicao
+        VARCHAR comprovante_pagamento
+        INTEGER orcamento_atual
+        TIMESTAMPTZ inicio_execucao
+        TIMESTAMPTZ fim_execucao
+        BIGINT versao
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
+    }
+
+    orcamentos_itens_ordem_servico {
+        VARCHAR id_ordem_servico PK,FK
+        INTEGER id_orcamento PK
+        INTEGER id_orcamento_item PK
+        VARCHAR tipo_item
+        VARCHAR status
+        BIGINT id_servico_sku
+        VARCHAR descricao
+        INTEGER quantidade
+        NUMERIC preco_unitario
+    }
+
+    historico_status_ordem_servico {
+        BIGSERIAL id PK
+        VARCHAR id_ordem_servico FK
+        VARCHAR status
+        TIMESTAMPTZ entrada_em
+        TIMESTAMPTZ saida_em
+        BIGINT duracao_milisegundos
+        VARCHAR correlation_id
+    }
+
+    conta_corrente_oficina {
+        BIGSERIAL id PK
+        VARCHAR tipo
+        VARCHAR origem
+        NUMERIC valor
+        DATE data_lancamento
+        VARCHAR descricao
+        VARCHAR numero_nota
+        VARCHAR serie_nota
+        VARCHAR cnpj_fornecedor
+        DATE data_emissao
+        VARCHAR id_ordem_servico
+        BOOLEAN estornado
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
+    }
+
+    clientes ||--o{ veiculos : "possui"
+    clientes ||--o{ ordens_servico : "abre"
+    veiculos ||--o{ ordens_servico : "atendido em"
+    ordens_servico ||--o{ orcamentos_itens_ordem_servico : "orca"
+    ordens_servico ||--o{ historico_status_ordem_servico : "transita"
+    pecas ||--o| estoque_pecas : "tem saldo"
+    pecas ||--o{ movimentacao_estoque_pecas : "movimenta"
+    pecas ||--o{ itens_nota_fiscal_fornecedor : "comprada em"
+    notas_fiscais_fornecedor ||--|{ itens_nota_fiscal_fornecedor : "detalha"
+    notas_fiscais_fornecedor |o..o{ movimentacao_estoque_pecas : "entrada sem FK"
+    notas_fiscais_fornecedor |o..o{ conta_corrente_oficina : "contas a pagar sem FK"
+    ordens_servico |o..o{ movimentacao_estoque_pecas : "consumo sem FK"
+    ordens_servico |o..o{ conta_corrente_oficina : "contas a receber sem FK"
+    servicos |o..o{ orcamentos_itens_ordem_servico : "referencia polimorfica"
+    numero_os_sequencia |o..o{ ordens_servico : "numera sem FK"
+    users |o..o{ ordens_servico : "operado por sem FK"

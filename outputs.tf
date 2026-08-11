@@ -23,6 +23,16 @@ output "database_security_group_id" {
   value       = aws_security_group.database.id
 }
 
+output "database_log_groups" {
+  description = "Log groups do CloudWatch usados na validação de observabilidade."
+  value       = [for log in var.enabled_cloudwatch_logs_exports : "/aws/rds/instance/${aws_db_instance.main.identifier}/${log}"]
+}
+
+output "performance_insights_enabled" {
+  description = "Indica se o Performance Insights foi habilitado no ambiente."
+  value       = aws_db_instance.main.performance_insights_enabled
+}
+
 output "jdbc_url" {
   description = "URL JDBC sem usuário ou senha."
   value       = "jdbc:postgresql://${aws_db_instance.main.address}:${aws_db_instance.main.port}/${var.db_name}"

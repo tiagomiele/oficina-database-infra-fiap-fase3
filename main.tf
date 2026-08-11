@@ -1,5 +1,10 @@
 locals {
   name = "${var.project_name}-${var.environment}"
+
+  db_identifier = "${local.name}-db"
+
+  # RDS publica cada log habilitado em um log group próprio e previsível.
+  managed_log_groups = var.manage_cloudwatch_log_groups ? toset(var.enabled_cloudwatch_logs_exports) : toset([])
 }
 
 resource "aws_db_subnet_group" "main" {
@@ -43,19 +48,45 @@ resource "aws_db_parameter_group" "postgres" {
     apply_method = "pending-reboot"
   }
 
+  # Conexões e desconexões são registradas de propósito: sustentam a evidência de
+  # que a aplicação no EKS e a Lambda de login realmente alcançaram o banco.
   parameter {
     name  = "log_connections"
-    value = "1"
+    value = var.log_connections ? "1" : "0"
   }
 
   parameter {
     name  = "log_disconnections"
-    value = "1"
+    value = var.log_disconnections ? "1" : "0"
+  }
+
+  # Somente consultas lentas são registradas, para diagnóstico de índices.
+  parameter {
+    name  = "log_min_duration_statement"
+    value = tostring(var.log_min_duration_statement_ms)
+  }
+
+  # Evita despejar o SQL completo de toda transação no CloudWatch.
+  parameter {
+    name  = "log_statement"
+    value = var.log_statement
   }
 
   parameter {
-    name  = "log_min_duration_statement"
-    value = "1000"
+    name  = "log_lock_waits"
+    value = "1"
+  }
+
+  # Parâmetros de bind ficam truncados em zero caractere, de modo que documentos,
+  # e-mails e telefones dos clientes nunca chegam ao log.
+  parameter {
+    name  = "log_parameter_max_length"
+    value = "0"
+  }
+
+  parameter {
+    name  = "log_parameter_max_length_on_error"
+    value = "0"
   }
 
   tags = {
@@ -63,8 +94,21 @@ resource "aws_db_parameter_group" "postgres" {
   }
 }
 
+# Log group gerenciado apenas para limitar a retenção e o custo do CloudWatch.
+# Quando desabilitado, o RDS cria o log group com retenção "Never expire".
+resource "aws_cloudwatch_log_group" "database" {
+  for_each = local.managed_log_groups
+
+  name              = "/aws/rds/instance/${local.db_identifier}/${each.value}"
+  retention_in_days = var.cloudwatch_logs_retention_days
+
+  tags = {
+    Name = "${local.name}-${each.value}-logs"
+  }
+}
+
 resource "aws_db_instance" "main" {
-  identifier = "${local.name}-db"
+  identifier = local.db_identifier
 
   engine         = "postgres"
   engine_version = var.db_engine_version
@@ -94,11 +138,24 @@ resource "aws_db_instance" "main" {
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:00-sun:05:00"
 
-  auto_minor_version_upgrade   = true
-  apply_immediately            = true
-  copy_tags_to_snapshot        = true
-  delete_automated_backups     = true
-  performance_insights_enabled = false
+  auto_minor_version_upgrade = true
+  apply_immediately          = true
+  copy_tags_to_snapshot      = true
+  delete_automated_backups   = true
+
+  enabled_cloudwatch_logs_exports = var.enabled_cloudwatch_logs_exports
+
+  # Performance Insights fica desligado por padrão: no Learner Lab ele consome
+  # cota sem ser necessário para as evidências exigidas.
+  performance_insights_enabled          = var.performance_insights_enabled
+  performance_insights_retention_period = var.performance_insights_enabled ? var.performance_insights_retention_period : null
+
+  # Enhanced Monitoring exigiria uma role IAM dedicada, o que não é permitido no
+  # AWS Academy. Permanece desligado a menos que uma role existente seja informada.
+  monitoring_interval = var.monitoring_role_arn == null ? 0 : var.monitoring_interval
+  monitoring_role_arn = var.monitoring_role_arn
+
+  depends_on = [aws_cloudwatch_log_group.database]
 
   lifecycle {
     precondition {
@@ -109,6 +166,11 @@ resource "aws_db_instance" "main" {
     precondition {
       condition     = var.skip_final_snapshot || var.final_snapshot_identifier != null
       error_message = "final_snapshot_identifier é obrigatório quando skip_final_snapshot for false."
+    }
+
+    precondition {
+      condition     = var.monitoring_interval == 0 || var.monitoring_role_arn != null
+      error_message = "monitoring_interval maior que zero exige monitoring_role_arn de uma role já existente."
     }
   }
 

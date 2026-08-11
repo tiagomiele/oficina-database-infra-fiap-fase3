@@ -13,55 +13,55 @@ Cada workspace mantém seu próprio state. Não reutilize o state combinado da F
 
 ## Variáveis do HCP Terraform
 
-Cadastre como variáveis de ambiente sensíveis e renove a cada sessão do Learner Lab:
+Não copie credenciais, VPC, subnets, security group ou senha pelo formulário. Execute no repositório do backend:
 
-```text
-AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY
-AWS_SESSION_TOKEN
+```powershell
+.\scripts\configure-environment.ps1 -Environment homolog
 ```
 
-Cadastre como variáveis Terraform:
+O script associa o Variable Set AWS compartilhado, mantém `environment`, reutiliza a senha local protegida e lê `vpc_id`, `private_subnet_ids` e `eks_cluster_security_group_id` diretamente dos outputs Kubernetes.
+
+As variáveis de observabilidade e custo têm padrão econômico. Cadastre uma sobrescrita somente quando houver decisão arquitetural explícita; os valores por ambiente estão em [`../environments`](../environments).
 
 ```text
-aws_region = "us-west-2"
-environment = "homolog" ou "production"
-vpc_id = "vpc-..."
-private_subnet_ids = ["subnet-...", "subnet-..."]
-allowed_security_group_ids = ["sg-..."]
-db_password = "valor-seguro"
+enabled_cloudwatch_logs_exports = ["postgresql"]
+cloudwatch_logs_retention_days  = 7
+performance_insights_enabled    = false
 ```
 
-Marque `private_subnet_ids` e `allowed_security_group_ids` como HCL. Marque `db_password` como sensível.
-
-Os valores de rede vêm dos outputs do repositório `oficina-kubernetes-infra-fiap-fase3`:
-
-- `vpc_id`;
-- `private_subnet_ids`;
-- `eks_cluster_security_group_id`.
+O script grava listas como HCL e `db_password` como sensível. Não reutilize IDs depois de reset do AWS Academy; reexecute o script após o novo apply do Kubernetes.
 
 ## Integração com GitHub Actions
 
-Em cada GitHub Environment (`homolog` e `production`), configure:
+O script central configura os GitHub Environments `homolog` e `production`, incluindo token HCP, credenciais AWS, nomes dos workspaces, região e `ENABLE_TERRAFORM_APPLY=true`.
 
-- secret `TF_API_TOKEN`;
-- variable `TF_CLOUD_ORGANIZATION`;
-- variable `TF_WORKSPACE_HOMOLOG`;
-- variable `TF_WORKSPACE_PRODUCTION`.
+A proteção **Required reviewers** continua manual por ser gate humano de governança.
 
-O workflow **Terraform plan** é manual. Ele seleciona o workspace pelo ambiente e envia o plan para execução remota no HCP Terraform.
+O workflow **Terraform plan** é manual. Ele valida a credencial temporária com
+`aws sts get-caller-identity`, seleciona o workspace pelo ambiente e envia o plan para
+execução remota no HCP Terraform.
+
+O workflow **Terraform apply** também é manual e executa `apply` ou `destroy` somente
+quando as três barreiras passam:
+
+1. `ENABLE_TERRAFORM_APPLY` vale `true` no ambiente escolhido;
+2. o campo de confirmação recebe exatamente `APPLY-<ambiente>` ou `DESTROY-<ambiente>`;
+3. o GitHub Environment aprova a execução (required reviewers).
+
+Ele roda o plan antes da operação e imprime os outputs ao final. Racional no
+[ADR 0008](adr/0008-cicd-com-gate-de-apply.md).
 
 O `workflow_dispatch` só aparece no GitHub Actions depois que o arquivo do workflow existe na branch padrão `main`. No primeiro bootstrap, promova o workflow até `main` ou execute o plan pela CLI com `TF_CLOUD_ORGANIZATION` e `TF_WORKSPACE`; em ambos os casos, mantenha Auto apply desativado.
 
 ## Ordem segura
 
-1. mantenha a sessão AWS Academy ativa;
-2. renove as três credenciais AWS no workspace;
-3. copie os outputs da infraestrutura Kubernetes;
-4. execute **Actions → Terraform plan → Run workflow**, selecionando `homolog`, ou use a CLI no primeiro bootstrap;
-5. revise recursos, alterações e outputs;
-6. somente depois de aprovação explícita, confirme o apply no HCP Terraform;
-7. colete evidências antes de encerrar o laboratório;
-8. execute destroy quando os recursos não forem mais necessários.
+1. mantenha a sessão AWS Academy ativa e execute o script central;
+2. aplique o Kubernetes somente após aprovação e reexecute o script para sincronizar os outputs;
+3. execute **Actions → Terraform plan → Run workflow**, selecionando o ambiente, ou use a CLI no primeiro bootstrap;
+4. revise recursos, alterações e outputs;
+5. execute **Terraform apply** com a confirmação textual e aprovação do environment, ou confirme o apply diretamente no HCP Terraform;
+6. reexecute o script central para propagar a URL JDBC;
+7. colete as evidências de [`evidence-checklist.md`](evidence-checklist.md) antes de encerrar o laboratório;
+8. execute o destroy pelo mesmo workflow quando necessário.
 
 Nenhum workflow deste repositório executa apply automático.
