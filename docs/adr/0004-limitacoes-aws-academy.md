@@ -29,8 +29,8 @@ Tratar as restrições como requisito de projeto, não como problema temporário
 - `ExpiredToken` é a falha operacional mais comum e tem procedimento próprio em
   [`../troubleshooting.md`](../troubleshooting.md);
 - as três credenciais (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-  `AWS_SESSION_TOKEN`) precisam ser renovadas a cada sessão, no workspace HCP e no
-  GitHub Environment;
+  `AWS_SESSION_TOKEN`) precisam ser renovadas a cada sessão por uma execução do script
+  central, que atualiza o Variable Set HCP e os GitHub Environments;
 - os recursos têm vida curta: cada validação recria o banco a partir do zero e as
   migrations do Flyway rodam de novo;
 - o endpoint do banco muda a cada recriação, então nenhum endpoint pode ser tratado como

@@ -13,11 +13,9 @@ laboratório (algumas horas) e não são renováveis por refresh.
 Correção:
 
 1. abra o Learner Lab e clique em **Start Lab** até o indicador ficar verde;
-2. abra **AWS Details → AWS CLI** e copie os três valores atuais;
-3. atualize no workspace HCP Terraform, como variáveis de ambiente sensíveis:
-   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`;
-4. atualize também os secrets do GitHub Environment usado pelos workflows;
-5. rode novamente o workflow.
+2. copie o bloco `[default]` atual de **AWS Details → AWS CLI**;
+3. no repositório do backend, execute `scripts/configure-environment.ps1 -Environment <ambiente>`;
+4. rode novamente o workflow.
 
 O `AWS_SESSION_TOKEN` é obrigatório. Credencial sem token de sessão falha com
 `InvalidClientTokenId`.

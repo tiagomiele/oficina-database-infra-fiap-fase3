@@ -17,7 +17,7 @@ Este repositório provisiona o RDS PostgreSQL em subnets privadas da VPC criada 
 
 ## Estados
 
-Homologação e produção utilizam workspaces/estados HCP Terraform independentes. Os outputs `vpc_id`, `private_subnet_ids` e `eks_cluster_security_group_id` do repositório Kubernetes são cadastrados como variáveis nos workspaces do banco.
+Homologação e produção utilizam workspaces/estados HCP Terraform independentes. O script central lê `vpc_id`, `private_subnet_ids` e `eks_cluster_security_group_id` do state Kubernetes e sincroniza os workspaces do banco sem cópia manual.
 
 ## Segurança
 
