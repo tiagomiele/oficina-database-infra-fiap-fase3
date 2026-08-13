@@ -91,8 +91,13 @@ variable "db_password" {
   sensitive   = true
 
   validation {
-    condition     = length(var.db_password) >= 16
-    error_message = "db_password deve possuir ao menos 16 caracteres."
+    condition = (
+      length(var.db_password) >= 16 &&
+      length(var.db_password) <= 128 &&
+      can(regex("^[!-~]+$", var.db_password)) &&
+      !can(regex("[/@\"]", var.db_password))
+    )
+    error_message = "db_password deve possuir entre 16 e 128 caracteres ASCII imprimíveis e não pode conter barra, arroba, aspas ou espaço."
   }
 }
 
