@@ -21,17 +21,29 @@ resource "aws_cloudwatch_log_group" "rds_telemetry" {
   retention_in_days = var.cloudwatch_logs_retention_days
 }
 
-resource "aws_lambda_function" "rds_telemetry" {
+resource "aws_sqs_queue" "rds_telemetry_dlq" {
   for_each = local.telemetry_environment
 
-  function_name = local.telemetry_name
-  description   = "Publica métricas agregadas e contagens sanitizadas do RDS no New Relic"
-  role          = local.lab_role_arn
-  runtime       = "python3.12"
-  architectures = ["arm64"]
-  handler       = "rds_newrelic_telemetry.handler"
-  timeout       = 60
-  memory_size   = 256
+  name                      = "${local.telemetry_name}-dlq"
+  message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
+}
+
+resource "aws_lambda_function" "rds_telemetry" {
+  #checkov:skip=CKV_AWS_173:A LabRole acadêmica não administra uma chave KMS de cliente.
+  #checkov:skip=CKV_AWS_272:O pacote interno é validado por hash e o Learner Lab não fornece perfil de assinatura.
+  #checkov:skip=CKV_AWS_117:A função acessa APIs públicas AWS e New Relic; uma VPC exigiria NAT pago.
+  for_each = local.telemetry_environment
+
+  function_name                  = local.telemetry_name
+  description                    = "Publica métricas agregadas e contagens sanitizadas do RDS no New Relic"
+  role                           = local.lab_role_arn
+  runtime                        = "python3.12"
+  architectures                  = ["arm64"]
+  handler                        = "rds_newrelic_telemetry.handler"
+  timeout                        = 60
+  memory_size                    = 256
+  reserved_concurrent_executions = 1
 
   filename         = data.archive_file.rds_newrelic_telemetry.output_path
   source_code_hash = data.archive_file.rds_newrelic_telemetry.output_base64sha256
@@ -45,6 +57,14 @@ resource "aws_lambda_function" "rds_telemetry" {
       RDS_INSTANCE_IDENTIFIER = local.db_identifier
       RDS_LOG_GROUP_NAME      = local.postgres_log_group
     }
+  }
+
+  dead_letter_config {
+    target_arn = aws_sqs_queue.rds_telemetry_dlq[each.key].arn
+  }
+
+  tracing_config {
+    mode = "Active"
   }
 
   depends_on = [

@@ -109,8 +109,9 @@ Métricas padrão do CloudWatch, sem custo adicional e sem Performance Insights:
 ## Telemetria agregada no New Relic
 
 Com `rds_newrelic_telemetry_enabled = true`, o Terraform cria uma Lambda Python agendada
-a cada cinco minutos. Ela lê as métricas padrão do namespace `AWS/RDS` e publica um evento
-customizado `OficinaRdsSample` na Event API do New Relic. A configuração central grava
+a cada cinco minutos. Ela usa concorrência reservada igual a um, X-Ray ativo e uma DLQ SQS
+criptografada para falhas definitivas. A função lê as métricas padrão do namespace `AWS/RDS`
+e publica um evento customizado `OficinaRdsSample` na Event API do New Relic. A configuração central grava
 `newrelic_account_id` e a `newrelic_license_key` sensível no workspace HCP do banco; nenhuma
 chave é armazenada no repositório.
 
