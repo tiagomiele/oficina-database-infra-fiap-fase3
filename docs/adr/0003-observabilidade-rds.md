@@ -1,4 +1,4 @@
-# ADR 0003 — Observabilidade por logs do PostgreSQL no CloudWatch
+# ADR 0003 — Observabilidade RDS por CloudWatch e eventos sanitizados no New Relic
 
 - Status: Aceito
 - Data: 2026-08-10
@@ -27,6 +27,11 @@ conjunto mínimo de parâmetros que sustenta a evidência:
 Performance Insights e Enhanced Monitoring permanecem desligados por padrão, com
 variáveis validadas para quem precisar ligar.
 
+Uma Lambda Python agendada a cada cinco minutos consulta métricas padrão de `AWS/RDS` e
+conta somente linhas de erro e consulta lenta no CloudWatch Logs. Ela publica o evento
+`OficinaRdsSample` no New Relic sem credencial do banco, SQL, parâmetros ou mensagem bruta.
+A Event API usa uma License key sensível mantida no HCP Terraform.
+
 ## Consequências
 
 - a evidência de observabilidade é reprodutível por CLI, sem console e sem recurso pago
@@ -35,7 +40,9 @@ variáveis validadas para quem precisar ligar.
 - o log não serve para auditoria de dados: quem alterou o quê é responsabilidade do log
   da aplicação, correlacionado por `correlation_id`;
 - elevar `log_statement` passa a gravar dado pessoal e é tratado como exceção
-  documentada, não como configuração normal.
+  documentada, não como configuração normal;
+- dashboard e alertas recebem CPU, conexões, armazenamento, memória, latências, IOPS e
+  contagens agregadas, sem permitir consulta aos dados funcionais do PostgreSQL.
 
 ## Alternativas descartadas
 
@@ -46,5 +53,7 @@ variáveis validadas para quem precisar ligar.
 - **Enhanced Monitoring**: exige role IAM dedicada, proibido no AWS Academy.
 - **pgaudit**: extensão adicional, mais volume de log e nenhuma exigência da fase que a
   justifique.
-- **Agente externo (por exemplo New Relic) apontando para o banco**: acrescentaria
-  credencial e custo sem cobrir nada que os logs e as métricas padrão já cobrem.
+- **Agente externo apontando diretamente para o banco**: acrescentaria credencial e
+  acesso à rede privada. O coletor adotado lê somente APIs CloudWatch com a `LabRole`.
+- **Encaminhar logs brutos ao New Relic**: aumentaria custo e risco de vazamento de SQL ou
+  dados pessoais; somente contagens sanitizadas são publicadas.

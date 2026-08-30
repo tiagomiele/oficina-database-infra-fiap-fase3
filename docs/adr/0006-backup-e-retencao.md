@@ -5,9 +5,10 @@
 
 ## Contexto
 
-O banco precisa demonstrar prática correta de backup e recuperação, mas vive em um
-laboratório descartável em que o `destroy` de fim de sessão precisa funcionar sempre e
-não pode deixar custo residual.
+O banco precisa demonstrar prática correta de backup e recuperação. Homologação pode ser
+descartável, mas o perfil versionado de produção deve preservar dados e impedir exclusão
+acidental. O Learner Lab requer um override explícito quando a demonstração precisar ser
+destruída no mesmo dia.
 
 ## Decisão
 
@@ -18,32 +19,32 @@ não pode deixar custo residual.
 | `maintenance_window` | dom 04:00-05:00 UTC | igual | imediatamente após o backup |
 | `delete_automated_backups` | `true` | `true` | não deixa backup órfão após o destroy |
 | `copy_tags_to_snapshot` | `true` | `true` | rastreabilidade de custo por projeto |
-| `skip_final_snapshot` | `true` | `true` | snapshot final sobreviveria ao destroy e seria cobrado |
-| `deletion_protection` | `false` | `false` | proteção ligada impede o destroy de fim de sessão |
+| `skip_final_snapshot` | `true` | `false` | produção exige snapshot final antes da exclusão |
+| `deletion_protection` | `false` | `true` | produção bloqueia exclusão acidental |
 | `storage_encrypted` | `true` | `true` | criptografia em repouso é obrigatória, mesmo no laboratório |
 | `rds.force_ssl` | `1` | `1` | criptografia em trânsito obrigatória |
 | retenção de log no CloudWatch | 7 dias | 14 dias | o padrão do RDS seria retenção infinita |
 
-A semântica é preservada no código, não removida: `final_snapshot_identifier` continua
-obrigatório quando `skip_final_snapshot = false`, validado por `precondition`, e os
-valores recomendados para uma conta AWS real estão comentados em
-`environments/production.tfvars.example` (`deletion_protection = true`,
-`skip_final_snapshot = false`, `multi_az = true`).
+`final_snapshot_identifier` é obrigatório quando `skip_final_snapshot = false`, validado
+por `precondition`. `environments/production.tfvars.example` define
+`deletion_protection = true`, `skip_final_snapshot = false` e `multi_az = true`. A
+configuração central sincroniza esses valores no workspace de produção.
 
 ## Consequências
 
 - recuperação point-in-time existe dentro da janela de retenção enquanto a instância
   vive;
-- ao encerrar a validação, nada permanece cobrado: nem snapshot, nem backup automático,
-  nem log group sem expiração;
+- homologação pode ser destruída sem snapshot residual;
+- produção preserva snapshot final e exige uma mudança deliberada antes do destroy;
 - ligar `deletion_protection` exige um apply para desligá-la antes do destroy, e isso
   está documentado em [`../troubleshooting.md`](../troubleshooting.md);
-- não existe cópia de backup entre regiões: o dado é acadêmico e descartável.
+- não existe cópia entre regiões no perfil atual; isso exigiria política adicional fora do Learner Lab.
 
 ## Alternativas descartadas
 
-- **`deletion_protection = true` como padrão**: quebraria o destroy de fim de sessão do
-  Learner Lab e deixaria a instância ligada consumindo crédito.
-- **Snapshot final obrigatório**: custo residual após o fim do laboratório.
+- **Usar o perfil de homologação em produção**: reduziria disponibilidade e permitiria
+  perda acidental de dados.
+- **Produção descartável como padrão**: atende ao custo do Learner Lab, mas não ao requisito
+  de alta disponibilidade; ficou disponível somente por override explícito.
 - **Retenção de 35 dias**: sem ganho didático e com mais armazenamento cobrado.
 - **AWS Backup**: outro serviço, outra permissão IAM, nenhum benefício aqui.

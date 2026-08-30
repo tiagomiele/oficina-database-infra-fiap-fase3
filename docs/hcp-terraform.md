@@ -41,27 +41,28 @@ O workflow **Terraform plan** é manual. Ele valida a credencial temporária com
 `aws sts get-caller-identity`, seleciona o workspace pelo ambiente e envia o plan para
 execução remota no HCP Terraform.
 
-O workflow **Terraform apply** também é manual e executa `apply` ou `destroy` somente
-quando as três barreiras passam:
+Merges em `homolog` e `main` iniciam automaticamente plan e apply. O apply só prossegue
+quando `ENABLE_TERRAFORM_APPLY=true` e o GitHub Environment aprova a execução. O HCP
+Terraform mantém Auto apply desativado.
 
-1. `ENABLE_TERRAFORM_APPLY` vale `true` no ambiente escolhido;
-2. o campo de confirmação recebe exatamente `APPLY-<ambiente>` ou `DESTROY-<ambiente>`;
-3. o GitHub Environment aprova a execução (required reviewers).
+`workflow_dispatch` serve para recuperação e destroy. Nessa execução manual, o campo de
+confirmação deve receber exatamente `APPLY-<ambiente>` ou `DESTROY-<ambiente>`.
 
 Ele roda o plan antes da operação e imprime os outputs ao final. Racional no
 [ADR 0008](adr/0008-cicd-com-gate-de-apply.md).
 
-O `workflow_dispatch` só aparece no GitHub Actions depois que o arquivo do workflow existe na branch padrão `main`. No primeiro bootstrap, promova o workflow até `main` ou execute o plan pela CLI com `TF_CLOUD_ORGANIZATION` e `TF_WORKSPACE`; em ambos os casos, mantenha Auto apply desativado.
+O `workflow_dispatch` só aparece no GitHub Actions depois que o arquivo existe em `main`.
+No primeiro bootstrap, use a CLI se ainda precisar de recuperação manual.
 
 ## Ordem segura
 
 1. mantenha a sessão AWS Academy ativa e execute o script central;
 2. aplique o Kubernetes somente após aprovação e reexecute o script para sincronizar os outputs;
-3. execute **Actions → Terraform plan → Run workflow**, selecionando o ambiente, ou use a CLI no primeiro bootstrap;
-4. revise recursos, alterações e outputs;
-5. execute **Terraform apply** com a confirmação textual e aprovação do environment, ou confirme o apply diretamente no HCP Terraform;
+3. faça merge na branch do ambiente; o pipeline inicia automaticamente e aguarda o gate;
+4. revise o plan no run e aprove o GitHub Environment;
+5. use a execução manual com confirmação textual somente para recuperação ou destroy;
 6. reexecute o script central para propagar a URL JDBC;
 7. colete as evidências de [`evidence-checklist.md`](evidence-checklist.md) antes de encerrar o laboratório;
 8. execute o destroy pelo mesmo workflow quando necessário.
 
-Nenhum workflow deste repositório executa apply automático.
+Pull Requests nunca executam apply; apenas merges nas branches de ambiente iniciam o fluxo.

@@ -104,4 +104,38 @@ Confirme na saída que nenhuma mensagem contém CPF, e-mail ou telefone. Se cont
 
 Métricas padrão do CloudWatch, sem custo adicional e sem Performance Insights:
 `CPUUtilization`, `FreeStorageSpace`, `DatabaseConnections`, `FreeableMemory`,
-`ReadIOPS` e `WriteIOPS`.
+`ReadLatency`, `WriteLatency`, `ReadIOPS` e `WriteIOPS`.
+
+## Telemetria agregada no New Relic
+
+Com `rds_newrelic_telemetry_enabled = true`, o Terraform cria uma Lambda Python agendada
+a cada cinco minutos. Ela lê as métricas padrão do namespace `AWS/RDS` e publica um evento
+customizado `OficinaRdsSample` na Event API do New Relic. A configuração central grava
+`newrelic_account_id` e a `newrelic_license_key` sensível no workspace HCP do banco; nenhuma
+chave é armazenada no repositório.
+
+O evento contém somente:
+
+- ambiente e identificador da instância;
+- CPU, conexões, armazenamento livre, memória livre, latências e IOPS;
+- contagens de linhas com severidade `ERROR`, `FATAL` ou `PANIC`;
+- contagem de linhas de consultas lentas na janela de cinco minutos.
+
+A Lambda nunca encaminha mensagem bruta, SQL, parâmetro de bind, CPF, e-mail ou credencial.
+O código está em `lambda/rds_newrelic_telemetry.py`; o agendamento e as preconditions estão
+em `telemetry.tf`. A página e os alertas que consultam `OficinaRdsSample` são gerenciados
+pelo workspace `oficina-newrelic-<ambiente>` do repositório Kubernetes.
+
+Validação após apply:
+
+```sql
+SELECT latest(cpuUtilizationPercent), latest(databaseConnections),
+       latest(freeStorageBytes), latest(postgresErrorCount)
+FROM OficinaRdsSample
+WHERE environment = '<ambiente>'
+FACET databaseIdentifier
+SINCE 30 minutes ago
+```
+
+A ausência de eventos dispara a condição `telemetria RDS ausente`. CPU, conexões,
+armazenamento livre e erros PostgreSQL possuem condições específicas por ambiente.

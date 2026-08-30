@@ -13,6 +13,7 @@ Este repositório provisiona o RDS PostgreSQL em subnets privadas da VPC criada 
 - backup, janela de manutenção e parâmetros de log;
 - SSL obrigatório pelo parameter group;
 - log groups do CloudWatch com retenção definida;
+- Lambda EventBridge que publica métricas e contagens sanitizadas no New Relic;
 - outputs não sensíveis para integração.
 
 ## Estados
@@ -31,9 +32,11 @@ Homologação e produção utilizam workspaces/estados HCP Terraform independent
 ## Observabilidade
 
 Os logs do PostgreSQL vão para o CloudWatch Logs, com retenção curta e parâmetros
-escolhidos para evidenciar conectividade e consulta lenta sem gravar dado pessoal.
-Performance Insights e Enhanced Monitoring ficam desligados por padrão. Detalhes em
-[`observability.md`](observability.md) e no [ADR 0003](adr/0003-observabilidade-rds.md).
+escolhidos para evidenciar conectividade e consulta lenta sem gravar dado pessoal. Uma
+Lambda agendada consulta métricas padrão do RDS e somente contagens sanitizadas dos logs,
+publicando `OficinaRdsSample` no New Relic. Performance Insights e Enhanced Monitoring
+ficam desligados por padrão. Detalhes em [`observability.md`](observability.md) e no
+[ADR 0003](adr/0003-observabilidade-rds.md).
 
 ## Decisões
 

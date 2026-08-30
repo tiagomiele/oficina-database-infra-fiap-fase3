@@ -10,6 +10,7 @@ funcional é responsabilidade das migrations Flyway do repositório da aplicaç�
 - DB subnet group e security group restrito às origens autorizadas;
 - parameter group, armazenamento, backup, manutenção e retenção;
 - exportação configurável dos logs do PostgreSQL para o CloudWatch Logs;
+- telemetria agregada e sanitizada do RDS para o New Relic;
 - outputs de conexão sem credenciais;
 - states Terraform independentes por ambiente;
 - documentação do modelo de dados real e da revisão de índices.
@@ -25,6 +26,8 @@ flowchart LR
     VPC[VPC e subnets privadas] --> RDS
     TF[HCP Terraform] --> RDS
     RDS --> CW[CloudWatch Logs]
+    CW --> Collector[Lambda agendada de telemetria]
+    Collector --> NR[New Relic]
 ```
 
 Detalhes em [`docs/architecture.md`](docs/architecture.md). O modelo entidade-relacionamento
@@ -35,7 +38,8 @@ final está em [`docs/data-model.md`](docs/data-model.md), com fonte versionada 
 
 - Terraform `>= 1.6, < 2.0` com state no HCP Terraform;
 - Amazon RDS PostgreSQL 16 (`db.t3.micro`, `gp3`);
-- AWS Security Groups, subnets privadas e CloudWatch Logs;
+- AWS Security Groups, subnets privadas, CloudWatch Logs, Lambda e EventBridge;
+- New Relic Event API para métricas e contagens sanitizadas;
 - GitHub Actions com aprovação por GitHub Environment.
 
 ## Variáveis e segredos
@@ -61,9 +65,11 @@ Principais variáveis opcionais (padrões completos em
 | `log_statement` | `"ddl"` | escopo de SQL registrado |
 | `performance_insights_enabled` | `false` | recurso pago, opcional |
 | `monitoring_interval` | `0` | Enhanced Monitoring exige role IAM existente |
-| `multi_az` | `false` | Multi-AZ dobra o custo de instância |
+| `multi_az` | `false` global; `true` no perfil production | réplica síncrona em outra AZ |
+| `rds_newrelic_telemetry_enabled` | `false` | cria a coleta agendada; a configuração central habilita por ambiente |
+| `newrelic_account_id` / `newrelic_license_key` | `0` / vazia | credenciais da Event API mantidas no HCP Terraform |
 | `backup_retention_days` | `7` | retenção do backup automático |
-| `deletion_protection` | `false` | ver [ADR 0006](docs/adr/0006-backup-e-retencao.md) |
+| `deletion_protection` | `false` global; `true` no perfil production | ver [ADR 0006](docs/adr/0006-backup-e-retencao.md) |
 
 Segredos nunca ficam no repositório: `*.tfvars` está no `.gitignore` e o CI roda
 Gitleaks.
@@ -85,6 +91,7 @@ GitHub, cada ambiente ainda usa o secret `TF_API_TOKEN` e as variables
 | `database_security_group_id` | integrações de rede futuras |
 | `database_log_groups` | validação de observabilidade |
 | `performance_insights_enabled` | evidência de controle de custo |
+| `rds_newrelic_telemetry_function_name` | Lambda que publica `OficinaRdsSample` no New Relic |
 
 Os inputs vêm do repositório de Kubernetes (`vpc_id`, `private_subnet_ids`,
 `eks_cluster_security_group_id`). Ver [`docs/repositories.md`](docs/repositories.md).
@@ -96,9 +103,9 @@ Os inputs vêm do repositório de Kubernetes (`vpc_id`, `private_subnet_ids`,
 | `homolog` | `homolog` | `oficina-database-homolog` | `homolog` |
 | `main` | `production` | `oficina-database-production` | `production` |
 
-Produção é mais conservadora que homologação em retenção de backup e de log. Nenhum dos
-dois liga Multi-AZ ou Performance Insights por padrão, por custo. Ver
-[`docs/cost.md`](docs/cost.md) e [ADR 0005](docs/adr/0005-separacao-de-ambientes.md).
+Produção usa Multi-AZ, proteção contra exclusão, snapshot final, retenção maior de backup
+e de log. Performance Insights permanece opcional. Ver [`docs/cost.md`](docs/cost.md) e
+[ADR 0005](docs/adr/0005-separacao-de-ambientes.md).
 
 ## Validação estática (sem custo)
 
@@ -122,10 +129,10 @@ Pelo GitHub Actions:
 
 - **Terraform plan** → escolha o ambiente. Valida a credencial com
   `aws sts get-caller-identity` e roda o plan remoto.
-- **Terraform apply** → escolha o ambiente e a operação (`apply` ou `destroy`). Só
-  executa quando a variable `ENABLE_TERRAFORM_APPLY` vale `true`, o campo de confirmação
-  é exatamente `APPLY-<ambiente>` (ou `DESTROY-<ambiente>`) e o GitHub Environment
-  aprova a execução.
+- merges em `homolog` e `main` iniciam plan e apply automaticamente; o apply só
+  executa quando `ENABLE_TERRAFORM_APPLY=true` e o GitHub Environment aprova;
+- `workflow_dispatch` permanece para recuperação ou destroy e exige confirmação exata
+  `APPLY-<ambiente>` ou `DESTROY-<ambiente>`.
 
 Pela CLI, com o workspace configurado:
 
@@ -140,8 +147,8 @@ terraform apply -input=false      # somente após revisar o plan
 terraform destroy -input=false    # ao final da coleta de evidências
 ```
 
-Nenhum workflow executa apply automático e o Auto apply do workspace permanece
-desligado.
+Pull Requests nunca executam apply. O Auto apply do HCP permanece desligado porque a
+orquestração e o gate pertencem ao GitHub Environment.
 
 ## Validação dos logs
 
@@ -152,13 +159,12 @@ não cheguem ao CloudWatch.
 
 ## Backup e exclusão
 
-Backup automático com retenção de 7 dias em homologação e 14 em produção, janela
-03:00-04:00 UTC, `delete_automated_backups = true` e `skip_final_snapshot = true`.
-`deletion_protection` fica desligado enquanto o ambiente vive no AWS Academy, para que o
-`destroy` de fim de sessão funcione; os valores recomendados para uma conta real estão
-comentados em
-[`environments/production.tfvars.example`](environments/production.tfvars.example).
-Racional completo no [ADR 0006](docs/adr/0006-backup-e-retencao.md).
+Backup automático usa retenção de 7 dias em homologação e 14 em produção, com janela
+03:00-04:00 UTC. O perfil versionado de produção exige `multi_az = true`,
+`deletion_protection = true`, `skip_final_snapshot = false` e snapshot final. Para uma
+demonstração descartável no AWS Academy, a configuração central aceita explicitamente
+`-UseAwsAcademyDisposableProductionProfile`; esse override reduz HA e deve ser removido
+antes da promoção final. Racional completo no [ADR 0006](docs/adr/0006-backup-e-retencao.md).
 
 ## Estado atual
 

@@ -4,6 +4,36 @@ variable "aws_region" {
   default     = "us-west-2"
 }
 
+variable "newrelic_account_id" {
+  description = "Account ID usado para publicar eventos customizados de telemetria do RDS."
+  type        = number
+  default     = 0
+}
+
+variable "newrelic_license_key" {
+  description = "License/Ingest key do New Relic. Fornecida como variável sensível no HCP Terraform."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "newrelic_region" {
+  description = "Região da conta New Relic."
+  type        = string
+  default     = "US"
+
+  validation {
+    condition     = contains(["US", "EU"], var.newrelic_region)
+    error_message = "newrelic_region deve ser US ou EU."
+  }
+}
+
+variable "rds_newrelic_telemetry_enabled" {
+  description = "Cria a Lambda agendada que publica métricas e contagens sanitizadas do RDS no New Relic."
+  type        = bool
+  default     = false
+}
+
 variable "project_name" {
   description = "Prefixo dos recursos."
   type        = string
@@ -131,7 +161,7 @@ variable "db_max_allocated_storage" {
 }
 
 variable "multi_az" {
-  description = "Ativa réplica Multi-AZ. Mantida false no Learner Lab para reduzir consumo."
+  description = "Ativa réplica Multi-AZ. O perfil production define true; homologação e override acadêmico usam false."
   type        = bool
   default     = false
 }
@@ -148,13 +178,13 @@ variable "backup_retention_days" {
 }
 
 variable "deletion_protection" {
-  description = "Proteção contra exclusão. Deve permanecer false durante as sessões descartáveis do Academy."
+  description = "Proteção contra exclusão. O perfil production define true."
   type        = bool
   default     = false
 }
 
 variable "skip_final_snapshot" {
-  description = "Permite destroy sem snapshot final no ambiente acadêmico."
+  description = "Controla a criação do snapshot final. O perfil production define false."
   type        = bool
   default     = true
 }

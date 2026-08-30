@@ -17,13 +17,15 @@ o custo escapa estão consolidados em [`../cost.md`](../cost.md). Os principais:
 `performance_insights_enabled = false`, `monitoring_interval = 0`, exportação apenas do
 log `postgresql`, retenção de log de 7 dias e `log_min_duration_statement` de 1000 ms.
 
-Além disso, o repositório não executa apply automático em nenhum workflow, o que impede
-que um merge crie recurso sem intenção.
+O merge inicia o workflow de apply, mas nenhum recurso é criado sem
+`ENABLE_TERRAFORM_APPLY=true` e aprovação do GitHub Environment. Configuração ausente
+falha explicitamente.
 
 ## Consequências
 
-- ligar Multi-AZ, Performance Insights ou Enhanced Monitoring é uma decisão consciente,
-  feita por variável no workspace, e nunca herdada de um exemplo;
+- produção usa Multi-AZ e retenção maior por decisão arquitetural; o override acadêmico
+  descartável precisa ser solicitado explicitamente;
+- ligar Performance Insights ou Enhanced Monitoring continua sendo decisão consciente;
 - as variáveis de recurso pago são validadas para evitar valor fora da camada gratuita
   por engano (por exemplo, retenção do Performance Insights);
 - o teto de autoscaling de armazenamento pode exigir ajuste consciente se o volume

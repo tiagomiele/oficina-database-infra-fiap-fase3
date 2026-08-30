@@ -31,10 +31,12 @@ Fluxo: toda mudança entra por Pull Request em `homolog`, é validada pelo CI, r
 
 - dois states independentes, portanto dois bancos independentes, com credenciais
   distintas;
-- `production` é mais conservador que `homolog` apenas em itens sem custo relevante
-  (retenção de backup e de log), conforme [`0007`](0007-controle-de-custo.md);
+- `production` é mais conservador que `homolog`: Multi-AZ, proteção contra exclusão,
+  snapshot final e retenções maiores, conforme [`0007`](0007-controle-de-custo.md);
 - promover para produção é um segundo `plan` e um segundo gate, nunca uma cópia de
   state;
+- o perfil descartável do AWS Academy é um override explícito para demonstração e não
+  altera o perfil versionado de produção;
 - os arquivos `environments/*.tfvars.example` documentam os dois ambientes, mas o
   valor real vive no workspace: `*.tfvars` está no `.gitignore`.
 

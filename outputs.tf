@@ -37,3 +37,8 @@ output "jdbc_url" {
   description = "URL JDBC sem usuário ou senha."
   value       = "jdbc:postgresql://${aws_db_instance.main.address}:${aws_db_instance.main.port}/${var.db_name}"
 }
+
+output "rds_newrelic_telemetry_function_name" {
+  description = "Lambda agendada que publica telemetria agregada do RDS no New Relic."
+  value       = try(aws_lambda_function.rds_telemetry["enabled"].function_name, null)
+}
