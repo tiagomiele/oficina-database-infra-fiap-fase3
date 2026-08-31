@@ -9,12 +9,12 @@ criptografia, acesso privado e backup.
 | Item | Padrão | Efeito no custo |
 |---|---|---|
 | `db_instance_class` | `db.t3.micro` | menor classe elegível ao free tier do RDS |
-| `multi_az` | `false` | Multi-AZ praticamente dobra o custo de instância |
+| `multi_az` | `false` em homolog; `true` em produção | Multi-AZ praticamente dobra o custo de instância |
 | `db_allocated_storage` | 20 GiB | mínimo do `gp3` |
 | `db_max_allocated_storage` | 40 GiB | teto do autoscaling, evita crescimento silencioso |
 | `backup_retention_days` | 7 em homolog, 14 em produção | backup além do tamanho do banco é cobrado |
 | `delete_automated_backups` | `true` | não deixa backup órfão após o destroy |
-| `skip_final_snapshot` | `true` | evita snapshot cobrado depois do fim do laboratório |
+| `skip_final_snapshot` | `true` em homolog; `false` em produção | produção preserva snapshot final |
 | `enabled_cloudwatch_logs_exports` | `["postgresql"]` | apenas o log necessário à evidência |
 | `cloudwatch_logs_retention_days` | 7 em homolog, 14 em produção | sem isso a retenção seria infinita |
 | `log_min_duration_statement_ms` | 1000 | limita volume de ingestão no CloudWatch |
@@ -43,10 +43,11 @@ criptografia, acesso privado e backup.
 
 ## Produção mais conservadora que homologação
 
-Produção difere de homologação apenas em itens sem custo adicional relevante:
-retenção maior de backup e de log, e exportação do log de `upgrade`. Multi-AZ,
-`deletion_protection` e snapshot final permanecem desligados enquanto o ambiente vive
-no AWS Academy, porque lá `production` é um ambiente lógico e descartável e a proteção
-contra exclusão impediria o `destroy` de fim de sessão. Os valores recomendados para
-uma conta AWS real estão comentados em
-[`../environments/production.tfvars.example`](../environments/production.tfvars.example).
+O perfil versionado de produção prioriza disponibilidade e recuperação: Multi-AZ,
+`deletion_protection = true`, snapshot final e retenções maiores. Esse perfil tem custo
+superior e não deve ser aplicado apenas para coletar evidência descartável no Learner Lab.
+Quando a demonstração acadêmica exigir um ambiente lógico de produção que será destruído
+no mesmo dia, execute a configuração central com
+`-UseAwsAcademyDisposableProductionProfile`. O override define Multi-AZ e proteção como
+`false` e ignora o snapshot final; a limitação deve constar na evidência e o workspace
+deve voltar ao perfil endurecido antes da promoção final.

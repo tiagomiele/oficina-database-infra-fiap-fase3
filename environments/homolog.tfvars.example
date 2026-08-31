@@ -28,6 +28,10 @@ log_disconnections              = true
 log_min_duration_statement_ms   = 1000
 log_statement                   = "ddl"
 
+# A configuração central preenche Account ID e License key no HCP Terraform.
+rds_newrelic_telemetry_enabled = true
+newrelic_region                = "US"
+
 # Performance Insights e Enhanced Monitoring permanecem desligados por custo
 # e porque o Enhanced Monitoring exigiria criar role IAM, bloqueado no Academy.
 performance_insights_enabled = false

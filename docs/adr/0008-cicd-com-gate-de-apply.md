@@ -1,4 +1,4 @@
-# ADR 0008 — CI/CD com apply sempre bloqueado por gate
+# ADR 0008 — CI/CD automático por merge com gate de ambiente
 
 - Status: Aceito
 - Data: 2026-08-10
@@ -19,21 +19,20 @@ Três workflows, com responsabilidades separadas:
    `terraform init -backend=false`, `terraform validate`, verificação dos nomes de
    variável nos `*.tfvars.example`, coerência entre o diagrama ER e a documentação,
    TFLint, Trivy e Gitleaks. Nunca usa credencial AWS.
-2. **Terraform plan** (`terraform-plan.yml`), manual, por ambiente: valida a credencial
-   temporária com `aws sts get-caller-identity` e executa `plan` remoto no workspace HCP
-   do ambiente escolhido.
-3. **Terraform apply** (`terraform-apply.yml`), manual, com três barreiras
-   independentes: a variável de ambiente `ENABLE_TERRAFORM_APPLY` precisa valer `true`,
-   o input `confirm` precisa ser exatamente `APPLY-<ambiente>`, e o job roda em um
-   GitHub Environment protegido por *required reviewers*, o que exige aprovação humana
-   antes de qualquer chamada à AWS.
+2. **Terraform plan** (`terraform-plan.yml`), manual, por ambiente, preservado para
+   análise e recuperação sem apply.
+3. **Terraform apply** (`terraform-apply.yml`), iniciado por push em `homolog` ou `main`:
+   resolve o workspace, exige `ENABLE_TERRAFORM_APPLY=true`, aguarda os *required
+   reviewers* do GitHub Environment, valida a sessão AWS, executa plan e então apply.
+   Configuração ausente ou credencial expirada falha explicitamente.
 
-Nenhum workflow é acionado por push para executar apply, e o Auto apply do workspace HCP
-permanece desligado. O destroy segue o mesmo padrão de gate, com input próprio.
+O `workflow_dispatch` permanece para recuperação e destroy. Nesse caminho, o input
+`confirm` precisa ser exatamente `APPLY-<ambiente>` ou `DESTROY-<ambiente>`. O Auto apply
+do workspace HCP permanece desligado.
 
 ## Consequências
 
-- é impossível criar recurso na AWS por merge;
+- o merge inicia a entrega automaticamente, mas não cria recurso sem aprovação do ambiente;
 - credencial ausente ou expirada falha no primeiro passo, com mensagem explícita, em vez
   de quebrar no meio do Terraform;
 - o CI é totalmente gratuito e roda sem segredo da AWS, então funciona mesmo com o
@@ -43,9 +42,9 @@ permanece desligado. O destroy segue o mesmo padrão de gate, com input próprio
 
 ## Alternativas descartadas
 
-- **Apply automático no merge para `main`**: incompatível com credencial temporária e com
-  o controle de custo.
-- **Gate único (apenas aprovação de ambiente)**: uma aprovação distraída bastaria; a
-  confirmação textual força a leitura do ambiente-alvo.
+- **Apply somente manual**: não atende ao requisito de pipeline iniciado pelo merge.
+- **Apply sem gate**: criaria recursos assim que a branch fosse atualizada.
+- **Confirmação textual também no merge**: não há input interativo em eventos `push`; ela
+  permanece no fluxo manual de recuperação e destroy.
 - **`terraform plan` no CI de Pull Request**: exigiria credencial AWS válida em todo PR,
   que expira, tornando o CI vermelho sem relação com a mudança.
