@@ -2,7 +2,7 @@ name: Terraform apply
 
 on:
   push:
-    branches: [homolog, main]
+    branches: [homolog]
   workflow_dispatch:
     inputs:
       environment:
@@ -35,15 +35,15 @@ concurrency:
 
 jobs:
   gate:
-    name: Gate (${{ github.event_name == 'push' && 'apply' || inputs.action }} ${{ github.event_name == 'push' && (github.ref_name == 'main' && 'production' || 'homolog') || inputs.environment }})
+    name: Gate (${{ github.event_name == 'push' && 'apply' || inputs.action }} ${{ github.event_name == 'push' && 'homolog' || inputs.environment }})
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'push' && (github.ref_name == 'main' && 'production' || 'homolog') || inputs.environment }}
+    environment: ${{ github.event_name == 'push' && 'homolog' || inputs.environment }}
     outputs:
       target_environment: ${{ steps.context.outputs.target_environment }}
       target_action: ${{ steps.context.outputs.target_action }}
     env:
       ENABLE_TERRAFORM_APPLY: ${{ vars.ENABLE_TERRAFORM_APPLY }}
-      TARGET_ENVIRONMENT: ${{ github.event_name == 'push' && (github.ref_name == 'main' && 'production' || 'homolog') || inputs.environment }}
+      TARGET_ENVIRONMENT: ${{ github.event_name == 'push' && 'homolog' || inputs.environment }}
       TARGET_ACTION: ${{ github.event_name == 'push' && 'apply' || inputs.action }}
       EXPECTED_CONFIRMATION: ${{ inputs.action == 'apply' && format('APPLY-{0}', inputs.environment) || format('DESTROY-{0}', inputs.environment) }}
       PROVIDED_CONFIRMATION: ${{ inputs.confirm }}
@@ -51,6 +51,14 @@ jobs:
       - name: Resolve deployment context
         id: context
         run: |
+          if [ "$TARGET_ENVIRONMENT" = "production" ] && [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "::error::production só pode ser executado a partir de main."
+            exit 1
+          fi
+          if [ "$TARGET_ENVIRONMENT" = "homolog" ] && [ "$GITHUB_REF_NAME" != "homolog" ]; then
+            echo "::error::homolog só pode ser executado a partir de homolog."
+            exit 1
+          fi
           echo "target_environment=$TARGET_ENVIRONMENT" >> "$GITHUB_OUTPUT"
           echo "target_action=$TARGET_ACTION" >> "$GITHUB_OUTPUT"
 
@@ -115,7 +123,7 @@ jobs:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
       - name: Terraform init
-        run: terraform init -input=false
+        run: terraform init -input=false -lockfile=readonly
 
       - name: Terraform plan
         run: |

@@ -41,9 +41,9 @@ O workflow **Terraform plan** é manual. Ele valida a credencial temporária com
 `aws sts get-caller-identity`, seleciona o workspace pelo ambiente e envia o plan para
 execução remota no HCP Terraform.
 
-Merges em `homolog` e `main` iniciam automaticamente plan e apply. O apply só prossegue
-quando `ENABLE_TERRAFORM_APPLY=true` e o GitHub Environment aprova a execução. O HCP
-Terraform mantém Auto apply desativado.
+Merges em `homolog` iniciam automaticamente plan e apply. O apply só prossegue quando
+`ENABLE_TERRAFORM_APPLY=true` e o GitHub Environment aprova a execução. Produção só é
+executada manualmente a partir de `main`. O HCP Terraform mantém Auto apply desativado.
 
 `workflow_dispatch` serve para recuperação e destroy. Nessa execução manual, o campo de
 confirmação deve receber exatamente `APPLY-<ambiente>` ou `DESTROY-<ambiente>`.
@@ -51,8 +51,9 @@ confirmação deve receber exatamente `APPLY-<ambiente>` ou `DESTROY-<ambiente>`
 Ele roda o plan antes da operação e imprime os outputs ao final. Racional no
 [ADR 0008](adr/0008-cicd-com-gate-de-apply.md).
 
-O `workflow_dispatch` só aparece no GitHub Actions depois que o arquivo existe em `main`.
-No primeiro bootstrap, use a CLI se ainda precisar de recuperação manual.
+O `workflow_dispatch` está versionado em `main`, portanto o botão **Run workflow** fica
+disponível. Para homologação, selecione a branch `homolog`; para produção, selecione
+`main`. O workflow recusa combinações incompatíveis entre branch e ambiente.
 
 ## Ordem segura
 
@@ -65,4 +66,5 @@ No primeiro bootstrap, use a CLI se ainda precisar de recuperação manual.
 7. colete as evidências de [`evidence-checklist.md`](evidence-checklist.md) antes de encerrar o laboratório;
 8. execute o destroy pelo mesmo workflow quando necessário.
 
-Pull Requests nunca executam apply; apenas merges nas branches de ambiente iniciam o fluxo.
+Pull Requests nunca executam apply. Merges em `homolog` iniciam o fluxo de homologação;
+produção requer uma execução manual autorizada a partir de `main`.
