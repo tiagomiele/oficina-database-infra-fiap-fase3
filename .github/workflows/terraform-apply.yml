@@ -1,0 +1,145 @@
+name: Terraform apply
+
+on:
+  push:
+    branches: [homolog]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: HCP Terraform workspace environment
+        required: true
+        default: homolog
+        type: choice
+        options:
+          - homolog
+          - production
+      action:
+        description: Operação a executar
+        required: true
+        default: apply
+        type: choice
+        options:
+          - apply
+          - destroy
+      confirm:
+        description: Digite APPLY-<ambiente> ou DESTROY-<ambiente> para confirmar
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-apply-${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Gate (${{ github.event_name == 'push' && 'apply' || inputs.action }} ${{ github.event_name == 'push' && 'homolog' || inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'push' && 'homolog' || inputs.environment }}
+    outputs:
+      target_environment: ${{ steps.context.outputs.target_environment }}
+      target_action: ${{ steps.context.outputs.target_action }}
+    env:
+      ENABLE_TERRAFORM_APPLY: ${{ vars.ENABLE_TERRAFORM_APPLY }}
+      TARGET_ENVIRONMENT: ${{ github.event_name == 'push' && 'homolog' || inputs.environment }}
+      TARGET_ACTION: ${{ github.event_name == 'push' && 'apply' || inputs.action }}
+      EXPECTED_CONFIRMATION: ${{ inputs.action == 'apply' && format('APPLY-{0}', inputs.environment) || format('DESTROY-{0}', inputs.environment) }}
+      PROVIDED_CONFIRMATION: ${{ inputs.confirm }}
+    steps:
+      - name: Resolve deployment context
+        id: context
+        run: |
+          if [ "$TARGET_ENVIRONMENT" = "production" ] && [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "::error::production só pode ser executado a partir de main."
+            exit 1
+          fi
+          if [ "$TARGET_ENVIRONMENT" = "homolog" ] && [ "$GITHUB_REF_NAME" != "homolog" ]; then
+            echo "::error::homolog só pode ser executado a partir de homolog."
+            exit 1
+          fi
+          echo "target_environment=$TARGET_ENVIRONMENT" >> "$GITHUB_OUTPUT"
+          echo "target_action=$TARGET_ACTION" >> "$GITHUB_OUTPUT"
+
+      - name: Require explicit enable flag
+        run: |
+          if [ "$ENABLE_TERRAFORM_APPLY" != "true" ]; then
+            echo "::error::A variable ENABLE_TERRAFORM_APPLY do ambiente $TARGET_ENVIRONMENT precisa valer 'true' para executar $TARGET_ACTION."
+            exit 1
+          fi
+
+      - name: Require typed confirmation for manual recovery
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "$PROVIDED_CONFIRMATION" != "$EXPECTED_CONFIRMATION" ]; then
+            echo "::error::Confirmação inválida. Era esperado exatamente '$EXPECTED_CONFIRMATION'."
+            exit 1
+          fi
+
+  terraform:
+    name: Terraform ${{ needs.gate.outputs.target_action }} (${{ needs.gate.outputs.target_environment }})
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: ${{ needs.gate.outputs.target_environment }}
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ needs.gate.outputs.target_environment == 'homolog' && vars.TF_WORKSPACE_HOMOLOG || vars.TF_WORKSPACE_PRODUCTION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate AWS Academy credentials
+        run: |
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Secret $name ausente no ambiente ${{ needs.gate.outputs.target_environment }}. Renove as credenciais do Learner Lab."
+              exit 1
+            fi
+          done
+
+          if ! output=$(aws sts get-caller-identity --output json 2>&1); then
+            echo "$output"
+            if echo "$output" | grep -qi 'ExpiredToken'; then
+              echo "::error::Credenciais do AWS Academy expiradas. Inicie o Learner Lab e atualize os três secrets."
+            else
+              echo "::error::aws sts get-caller-identity falhou. Verifique as credenciais temporárias."
+            fi
+            exit 1
+          fi
+          echo "$output" | jq -r '"Conta: \(.Account)  Identidade: \(.Arn)"'
+
+      - name: Validate HCP configuration
+        run: |
+          test -n "$TF_CLOUD_ORGANIZATION" || { echo "::error::variable TF_CLOUD_ORGANIZATION ausente."; exit 1; }
+          test -n "$TF_WORKSPACE" || { echo "::error::variable do workspace HCP ausente para ${{ needs.gate.outputs.target_environment }}."; exit 1; }
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform init
+        run: terraform init -input=false -lockfile=readonly
+
+      - name: Terraform plan
+        run: |
+          if [ "${{ needs.gate.outputs.target_action }}" = "destroy" ]; then
+            terraform plan -destroy -input=false -no-color
+          else
+            terraform plan -input=false -no-color
+          fi
+
+      - name: Terraform apply
+        if: needs.gate.outputs.target_action == 'apply'
+        run: terraform apply -input=false -auto-approve -no-color
+
+      - name: Terraform destroy
+        if: needs.gate.outputs.target_action == 'destroy'
+        run: terraform destroy -input=false -auto-approve -no-color
+
+      - name: Outputs sem credenciais
+        run: terraform output -no-color

@@ -1,0 +1,67 @@
+name: Terraform plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: HCP Terraform workspace environment
+        required: true
+        default: homolog
+        type: choice
+        options:
+          - homolog
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ inputs.environment == 'homolog' && vars.TF_WORKSPACE_HOMOLOG || vars.TF_WORKSPACE_PRODUCTION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate AWS Academy credentials
+        run: |
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Secret $name ausente no ambiente ${{ inputs.environment }}. Renove as credenciais do Learner Lab."
+              exit 1
+            fi
+          done
+
+          if ! output=$(aws sts get-caller-identity --output json 2>&1); then
+            echo "$output"
+            if echo "$output" | grep -qi 'ExpiredToken'; then
+              echo "::error::Credenciais do AWS Academy expiradas. Inicie o Learner Lab e atualize os três secrets."
+            else
+              echo "::error::aws sts get-caller-identity falhou. Verifique as credenciais temporárias."
+            fi
+            exit 1
+          fi
+          echo "$output" | jq -r '"Conta: \(.Account)  Identidade: \(.Arn)"'
+
+      - name: Validate HCP configuration
+        run: |
+          test -n "$TF_CLOUD_ORGANIZATION" || { echo "::error::variable TF_CLOUD_ORGANIZATION ausente."; exit 1; }
+          test -n "$TF_WORKSPACE" || { echo "::error::variable do workspace HCP ausente para ${{ inputs.environment }}."; exit 1; }
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform init
+        run: terraform init -input=false -lockfile=readonly
+
+      - name: Terraform plan
+        run: terraform plan -input=false -no-color
