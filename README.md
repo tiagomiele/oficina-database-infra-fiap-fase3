@@ -129,10 +129,11 @@ Pelo GitHub Actions:
 
 - **Terraform plan** → escolha o ambiente. Valida a credencial com
   `aws sts get-caller-identity` e roda o plan remoto.
-- merges em `homolog` e `main` iniciam plan e apply automaticamente; o apply só
-  executa quando `ENABLE_TERRAFORM_APPLY=true` e o GitHub Environment aprova;
-- `workflow_dispatch` permanece para recuperação ou destroy e exige confirmação exata
-  `APPLY-<ambiente>` ou `DESTROY-<ambiente>`.
+- merges em `homolog` iniciam plan e apply automaticamente; o apply só executa
+  quando `ENABLE_TERRAFORM_APPLY=true` e o GitHub Environment aprova;
+- como o workflow existe em `main`, `workflow_dispatch` permite apply ou destroy em
+  `homolog` a partir da branch `homolog` e em `production` a partir de `main`, com
+  confirmação exata `APPLY-<ambiente>` ou `DESTROY-<ambiente>`.
 
 Pela CLI, com o workspace configurado:
 
@@ -141,7 +142,7 @@ export TF_CLOUD_ORGANIZATION=<organizacao>
 export TF_WORKSPACE=oficina-database-homolog
 
 aws sts get-caller-identity   # falha aqui significa credencial expirada
-terraform init -input=false
+terraform init -input=false -lockfile=readonly
 terraform plan -input=false
 terraform apply -input=false      # somente após revisar o plan
 terraform destroy -input=false    # ao final da coleta de evidências
