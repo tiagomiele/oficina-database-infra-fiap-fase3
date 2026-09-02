@@ -35,9 +35,9 @@ O script grava listas como HCL e `db_password` como sensível. Não reutilize ID
 
 O script central configura os GitHub Environments `homolog` e `production`, incluindo token HCP, credenciais AWS, nomes dos workspaces, região e `ENABLE_TERRAFORM_APPLY=true`.
 
-A proteção **Required reviewers** deve existir somente no GitHub Environment `production`. Os environments `homolog`, `homolog-plan` e `production-plan` não possuem aprovação manual.
+A proteção **Required reviewers** deve existir somente no GitHub Environment `production`. O environment `homolog` não possui aprovação manual.
 
-O workflow **Terraform plan** executa automaticamente em Pull Requests que alteram a infraestrutura e também pode ser iniciado manualmente. Ele seleciona o workspace pelo ambiente e envia o plan para execução remota no HCP Terraform, sem apply.
+O workflow **Terraform plan** executa automaticamente em Pull Requests que alteram a infraestrutura e também pode ser iniciado manualmente. Ele usa `homolog` como contexto de configuração, seleciona o workspace de homologação ou produção pelo destino e envia o plan para execução remota no HCP Terraform, sem apply.
 
 Merges em `homolog` iniciam automaticamente plan e apply, sem aprovação manual. Merges em `main` usam uma única aprovação no environment `production`. Em ambos os casos, o apply só prossegue quando `ENABLE_TERRAFORM_APPLY=true`. O HCP Terraform mantém Auto apply desativado.
 
