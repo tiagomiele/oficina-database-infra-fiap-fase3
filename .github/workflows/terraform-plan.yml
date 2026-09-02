@@ -28,7 +28,7 @@ jobs:
   plan:
     name: Plan (${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production' || 'homolog') || inputs.environment }})
     runs-on: ubuntu-latest
-    environment: homolog
+    environment: ${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production-plan' || 'homolog-plan') || (inputs.environment == 'production' && 'production-plan' || 'homolog-plan') }}
     permissions:
       contents: read
     env:
