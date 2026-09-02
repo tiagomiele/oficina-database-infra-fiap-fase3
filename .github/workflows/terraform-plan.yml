@@ -1,10 +1,18 @@
 name: Terraform plan
 
 on:
+  pull_request:
+    branches: [main, homolog]
+    paths:
+      - '.github/workflows/terraform-plan.yml'
+      - 'environments/**'
+      - 'lambda/**'
+      - '*.tf'
+      - '.terraform.lock.hcl'
   workflow_dispatch:
     inputs:
       environment:
-        description: HCP Terraform workspace environment
+        description: Ambiente HCP Terraform
         required: true
         default: homolog
         type: choice
@@ -12,56 +20,46 @@ on:
           - homolog
           - production
 
-permissions:
-  contents: read
+concurrency:
+  group: terraform-plan-${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production' || 'homolog') || inputs.environment }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   plan:
-    name: Plan (${{ inputs.environment }})
+    name: Plan (${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production' || 'homolog') || inputs.environment }})
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: ${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production-plan' || 'homolog-plan') || (inputs.environment == 'production' && 'production-plan' || 'homolog-plan') }}
+    permissions:
+      contents: read
     env:
+      TARGET_ENVIRONMENT: ${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production' || 'homolog') || inputs.environment }}
       TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
-      TF_WORKSPACE: ${{ inputs.environment == 'homolog' && vars.TF_WORKSPACE_HOMOLOG || vars.TF_WORKSPACE_PRODUCTION }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+      TF_WORKSPACE: ${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && vars.TF_WORKSPACE_PRODUCTION || vars.TF_WORKSPACE_HOMOLOG) || (inputs.environment == 'production' && vars.TF_WORKSPACE_PRODUCTION || vars.TF_WORKSPACE_HOMOLOG) }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Validate AWS Academy credentials
-        run: |
-          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Secret $name ausente no ambiente ${{ inputs.environment }}. Renove as credenciais do Learner Lab."
-              exit 1
-            fi
-          done
-
-          if ! output=$(aws sts get-caller-identity --output json 2>&1); then
-            echo "$output"
-            if echo "$output" | grep -qi 'ExpiredToken'; then
-              echo "::error::Credenciais do AWS Academy expiradas. Inicie o Learner Lab e atualize os três secrets."
-            else
-              echo "::error::aws sts get-caller-identity falhou. Verifique as credenciais temporárias."
-            fi
-            exit 1
-          fi
-          echo "$output" | jq -r '"Conta: \(.Account)  Identidade: \(.Arn)"'
-
-      - name: Validate HCP configuration
-        run: |
-          test -n "$TF_CLOUD_ORGANIZATION" || { echo "::error::variable TF_CLOUD_ORGANIZATION ausente."; exit 1; }
-          test -n "$TF_WORKSPACE" || { echo "::error::variable do workspace HCP ausente para ${{ inputs.environment }}."; exit 1; }
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
+      - name: Validate HCP configuration
+        run: |
+          set -euo pipefail
+          test -n "$TF_CLOUD_ORGANIZATION" || { echo "::error::TF_CLOUD_ORGANIZATION não configurada no ambiente de plan."; exit 1; }
+          test -n "$TF_WORKSPACE" || { echo "::error::Workspace HCP de $TARGET_ENVIRONMENT não configurado no ambiente de plan."; exit 1; }
+
       - name: Terraform init
         run: terraform init -input=false -lockfile=readonly
 
       - name: Terraform plan
         run: terraform plan -input=false -no-color
+
+      - name: Summary
+        run: |
+          {
+            echo "## Plan de ${TARGET_ENVIRONMENT}"
+            echo
+            echo "- workspace: \`${TF_WORKSPACE}\`"
+            echo "- nenhum apply executado"
+          } >> "$GITHUB_STEP_SUMMARY"
