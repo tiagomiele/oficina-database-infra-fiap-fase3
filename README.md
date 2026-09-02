@@ -127,13 +127,11 @@ Configure os workspaces conforme [`docs/hcp-terraform.md`](docs/hcp-terraform.md
 
 Pelo GitHub Actions:
 
-- **Terraform plan** → escolha o ambiente. Valida a credencial com
-  `aws sts get-caller-identity` e roda o plan remoto.
-- merges em `homolog` iniciam plan e apply automaticamente; o apply só executa
-  quando `ENABLE_TERRAFORM_APPLY=true` e o GitHub Environment aprova;
-- como o workflow existe em `main`, `workflow_dispatch` permite apply ou destroy em
-  `homolog` a partir da branch `homolog` e em `production` a partir de `main`, com
-  confirmação exata `APPLY-<ambiente>` ou `DESTROY-<ambiente>`.
+- Pull Requests para `homolog` ou `main` executam um plan remoto sem apply quando a infraestrutura muda;
+- merges em `homolog` iniciam plan e apply automaticamente, sem aprovação manual;
+- merges em `main` usam uma única aprovação no GitHub Environment `production`;
+- `workflow_dispatch` permite repetir o apply na branch correspondente durante bootstrap ou recuperação;
+- destroy não faz parte da esteira e permanece manual via Terraform CLI.
 
 Pela CLI, com o workspace configurado:
 

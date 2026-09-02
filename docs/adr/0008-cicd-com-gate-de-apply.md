@@ -1,4 +1,4 @@
-# ADR 0008 — CI/CD automático por merge com gate de ambiente
+# ADR 0008 — CI/CD automático por merge com gate de produção
 
 - Status: Aceito
 - Data: 2026-08-10
@@ -14,37 +14,38 @@ temporária expirou.
 
 Três workflows, com responsabilidades separadas:
 
-1. **CI** (`ci.yml`), em todo Pull Request e push para `homolog`/`main`: validação
+1. **CI** (`ci.yml`), em todo push e em Pull Requests para `homolog`/`main`: validação
    estática e sem nuvem — documentação obrigatória, `terraform fmt`,
    `terraform init -backend=false`, `terraform validate`, verificação dos nomes de
    variável nos `*.tfvars.example`, coerência entre o diagrama ER e a documentação,
    TFLint, Trivy e Gitleaks. Nunca usa credencial AWS.
-2. **Terraform plan** (`terraform-plan.yml`), manual, por ambiente, preservado para
-   análise e recuperação sem apply.
-3. **Terraform apply** (`terraform-apply.yml`), iniciado por push em `homolog` ou `main`:
-   resolve o workspace, exige `ENABLE_TERRAFORM_APPLY=true`, aguarda os *required
-   reviewers* do GitHub Environment, valida a sessão AWS, executa plan e então apply.
-   Configuração ausente ou credencial expirada falha explicitamente.
+2. **Terraform plan** (`terraform-plan.yml`), automático nos Pull Requests que alteram
+   a infraestrutura e manual para recuperação. Usa environments sem reviewers e nunca
+   executa apply.
+3. **Terraform deploy** (`terraform-apply.yml`), iniciado por push em `homolog` ou
+   `main`: resolve o workspace, exige `ENABLE_TERRAFORM_APPLY=true`, valida a sessão AWS,
+   executa o plan autoritativo e então apply. Homologação não possui gate humano;
+   produção concentra uma única aprovação no GitHub Environment `production`.
 
-O `workflow_dispatch` permanece para recuperação e destroy. Nesse caminho, o input
-`confirm` precisa ser exatamente `APPLY-<ambiente>` ou `DESTROY-<ambiente>`. O Auto apply
-do workspace HCP permanece desligado.
+O `workflow_dispatch` permanece somente para repetir o apply durante bootstrap ou
+recuperação, a partir da branch correspondente. Destroy é manual via Terraform CLI e
+não faz parte do GitHub Actions. O Auto apply do workspace HCP permanece desligado.
 
 ## Consequências
 
-- o merge inicia a entrega automaticamente, mas não cria recurso sem aprovação do ambiente;
+- o merge em `homolog` inicia a entrega automaticamente, sem aprovações repetidas;
+- o merge em `main` registra uma única aprovação antes do deploy de produção;
 - credencial ausente ou expirada falha no primeiro passo, com mensagem explícita, em vez
   de quebrar no meio do Terraform;
 - o CI é totalmente gratuito e roda sem segredo da AWS, então funciona mesmo com o
   laboratório desligado;
-- quem executa o apply precisa de permissão no GitHub Environment, e a execução fica
-  registrada com o aprovador.
+- destroy exige execução operacional manual e confirmação interativa do Terraform.
 
 ## Alternativas descartadas
 
 - **Apply somente manual**: não atende ao requisito de pipeline iniciado pelo merge.
-- **Apply sem gate**: criaria recursos assim que a branch fosse atualizada.
-- **Confirmação textual também no merge**: não há input interativo em eventos `push`; ela
-  permanece no fluxo manual de recuperação e destroy.
-- **`terraform plan` no CI de Pull Request**: exigiria credencial AWS válida em todo PR,
-  que expira, tornando o CI vermelho sem relação com a mudança.
+- **Gate em homologação**: repete uma decisão já representada pelo merge protegido e torna
+  o bootstrap desnecessariamente lento.
+- **Destroy no GitHub Actions**: não é requisito da fase e amplia o risco operacional.
+- **Plan usando credencial AWS do runner**: a sessão expira; o plan remoto usa as variáveis
+  temporárias já sincronizadas no workspace HCP.

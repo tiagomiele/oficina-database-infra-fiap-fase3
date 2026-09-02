@@ -35,36 +35,24 @@ O script grava listas como HCL e `db_password` como sensível. Não reutilize ID
 
 O script central configura os GitHub Environments `homolog` e `production`, incluindo token HCP, credenciais AWS, nomes dos workspaces, região e `ENABLE_TERRAFORM_APPLY=true`.
 
-A proteção **Required reviewers** continua manual por ser gate humano de governança.
+A proteção **Required reviewers** deve existir somente no GitHub Environment `production`. Os environments `homolog`, `homolog-plan` e `production-plan` não possuem aprovação manual.
 
-O workflow **Terraform plan** é manual. Ele valida a credencial temporária com
-`aws sts get-caller-identity`, seleciona o workspace pelo ambiente e envia o plan para
-execução remota no HCP Terraform.
+O workflow **Terraform plan** executa automaticamente em Pull Requests que alteram a infraestrutura e também pode ser iniciado manualmente. Ele seleciona o workspace pelo ambiente e envia o plan para execução remota no HCP Terraform, sem apply.
 
-Merges em `homolog` iniciam automaticamente plan e apply. O apply só prossegue quando
-`ENABLE_TERRAFORM_APPLY=true` e o GitHub Environment aprova a execução. Produção só é
-executada manualmente a partir de `main`. O HCP Terraform mantém Auto apply desativado.
+Merges em `homolog` iniciam automaticamente plan e apply, sem aprovação manual. Merges em `main` usam uma única aprovação no environment `production`. Em ambos os casos, o apply só prossegue quando `ENABLE_TERRAFORM_APPLY=true`. O HCP Terraform mantém Auto apply desativado.
 
-`workflow_dispatch` serve para recuperação e destroy. Nessa execução manual, o campo de
-confirmação deve receber exatamente `APPLY-<ambiente>` ou `DESTROY-<ambiente>`.
+O `workflow_dispatch` serve somente para repetir o apply durante bootstrap ou recuperação. Para homologação, selecione a branch `homolog`; para produção, selecione `main`. O workflow recusa outras branches. Destroy é executado manualmente pela CLI, com confirmação interativa.
 
-Ele roda o plan antes da operação e imprime os outputs ao final. Racional no
-[ADR 0008](adr/0008-cicd-com-gate-de-apply.md).
-
-O `workflow_dispatch` está versionado em `main`, portanto o botão **Run workflow** fica
-disponível. Para homologação, selecione a branch `homolog`; para produção, selecione
-`main`. O workflow recusa combinações incompatíveis entre branch e ambiente.
+O deploy roda o plan autoritativo antes do apply e imprime os outputs ao final. Racional no [ADR 0008](adr/0008-cicd-com-gate-de-apply.md).
 
 ## Ordem segura
 
 1. mantenha a sessão AWS Academy ativa e execute o script central;
-2. aplique o Kubernetes somente após aprovação e reexecute o script para sincronizar os outputs;
-3. faça merge na branch do ambiente; o pipeline inicia automaticamente e aguarda o gate;
-4. revise o plan no run e aprove o GitHub Environment;
-5. use a execução manual com confirmação textual somente para recuperação ou destroy;
-6. reexecute o script central para propagar a URL JDBC;
-7. colete as evidências de [`evidence-checklist.md`](evidence-checklist.md) antes de encerrar o laboratório;
-8. execute o destroy pelo mesmo workflow quando necessário.
+2. aplique o Kubernetes e reexecute o script para sincronizar os outputs;
+3. revise o plan do Pull Request;
+4. faça merge em `homolog` para plan e apply automáticos;
+5. reexecute o script central para propagar a URL JDBC;
+6. colete as evidências de [`evidence-checklist.md`](evidence-checklist.md) antes de encerrar o laboratório;
+7. execute destroy manualmente via Terraform CLI quando necessário.
 
-Pull Requests nunca executam apply. Merges em `homolog` iniciam o fluxo de homologação;
-produção requer uma execução manual autorizada a partir de `main`.
+Pull Requests nunca executam apply. Merges em `homolog` iniciam o fluxo automático de homologação; merges em `main` aguardam uma única aprovação do environment `production`.
