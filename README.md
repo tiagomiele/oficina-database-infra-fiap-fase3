@@ -118,8 +118,8 @@ python3 scripts/validate_docs.py
 ```
 
 O CI executa os mesmos passos, mais Trivy, Gitleaks, verificação dos nomes de variável
-dos `*.tfvars.example` e verificação de ausência de recurso IAM. O CI **não** usa
-credencial AWS.
+dos `*.tfvars.example` e verificação de ausência de recurso IAM. Ele apresenta quatro
+jobs sequenciais: `Repository validation → Terraform validation → RDS telemetry tests → Security validation`. O CI **não** usa credencial AWS.
 
 ## Plan, apply e destroy
 
@@ -128,8 +128,8 @@ Configure os workspaces conforme [`docs/hcp-terraform.md`](docs/hcp-terraform.md
 Pelo GitHub Actions:
 
 - Pull Requests para `homolog` ou `main` executam um plan remoto sem apply quando a infraestrutura muda;
-- merges em `homolog` iniciam plan e apply automaticamente, sem aprovação manual;
-- merges em `main` usam uma única aprovação no GitHub Environment `production`;
+- merges em `homolog` exibem `Validate configuration and AWS → Terraform database → Deployment summary`, executando plan e apply sem aprovação manual;
+- merges em `main` preservam plan e apply em um único job, com uma única aprovação no GitHub Environment `production`;
 - `workflow_dispatch` permite repetir o apply na branch correspondente durante bootstrap ou recuperação;
 - destroy não faz parte da esteira e permanece manual via Terraform CLI.
 
