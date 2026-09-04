@@ -39,7 +39,7 @@ A proteção **Required reviewers** deve existir somente no GitHub Environment `
 
 O workflow **Terraform plan** executa automaticamente em Pull Requests que alteram a infraestrutura e também pode ser iniciado manualmente. Ele seleciona o workspace pelo ambiente e envia o plan para execução remota no HCP Terraform, sem apply.
 
-Merges em `homolog` iniciam automaticamente plan e apply, sem aprovação manual. Merges em `main` usam uma única aprovação no environment `production`. Em ambos os casos, o apply só prossegue quando `ENABLE_TERRAFORM_APPLY=true`. O HCP Terraform mantém Auto apply desativado.
+Merges em `homolog` apresentam três jobs sequenciais: validação da configuração e da sessão AWS → plan/apply do Terraform → resumo. Merges em `main` mantêm toda a execução em um único job e usam uma única aprovação no environment `production`. Em ambos os casos, o apply só prossegue quando `ENABLE_TERRAFORM_APPLY=true`. O HCP Terraform mantém Auto apply desativado.
 
 O `workflow_dispatch` serve somente para repetir o apply durante bootstrap ou recuperação. Para homologação, selecione a branch `homolog`; para produção, selecione `main`. O workflow recusa outras branches. Destroy é executado manualmente pela CLI, com confirmação interativa.
 

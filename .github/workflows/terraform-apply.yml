@@ -17,17 +17,107 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Apply (${{ github.ref_name == 'main' && 'production' || 'homolog' }})
-    if: github.ref_name == 'homolog' || github.ref_name == 'main'
+  validate-homolog:
+    name: Validate configuration and AWS
+    if: github.ref_name == 'homolog'
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'production' || 'homolog' }}
+    environment: homolog
     permissions:
       contents: read
     env:
-      TARGET_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'homolog' }}
+      TARGET_ENVIRONMENT: homolog
       TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
-      TF_WORKSPACE: ${{ github.ref_name == 'main' && vars.TF_WORKSPACE_PRODUCTION || vars.TF_WORKSPACE_HOMOLOG }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE_HOMOLOG }}
+      ENABLE_TERRAFORM_APPLY: ${{ vars.ENABLE_TERRAFORM_APPLY }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+    steps:
+      - name: Validate branch and deployment configuration
+        env:
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "$ENABLE_TERRAFORM_APPLY" != "true" ]; then
+            echo "::error::ENABLE_TERRAFORM_APPLY deve valer true no ambiente ${TARGET_ENVIRONMENT}."
+            exit 1
+          fi
+          missing=()
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN TF_CLOUD_ORGANIZATION TF_WORKSPACE TF_API_TOKEN; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::Configuração incompleta do GitHub Environment: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+      - name: Validate AWS Academy session
+        run: |
+          aws sts get-caller-identity >/dev/null
+          echo "Sessão AWS válida."
+
+  terraform-homolog:
+    name: Terraform database
+    needs: validate-homolog
+    runs-on: ubuntu-latest
+    environment: homolog
+    permissions:
+      contents: read
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE_HOMOLOG }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform init
+        run: terraform init -input=false -lockfile=readonly
+
+      - name: Terraform plan
+        run: terraform plan -input=false -no-color
+
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve -no-color
+
+      - name: Terraform outputs
+        run: terraform output -no-color
+
+  summary-homolog:
+    name: Deployment summary
+    needs: terraform-homolog
+    runs-on: ubuntu-latest
+    environment: homolog
+    permissions:
+      contents: read
+    env:
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE_HOMOLOG }}
+    steps:
+      - name: Summary
+        run: |
+          {
+            echo "## Database aplicado em homolog"
+            echo
+            echo "- workspace: \`${TF_WORKSPACE}\`"
+            echo "- branch: \`${GITHUB_REF_NAME}\`"
+            echo "- commit: \`${GITHUB_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-production:
+    name: Apply (production)
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      TARGET_ENVIRONMENT: production
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE_PRODUCTION }}
       ENABLE_TERRAFORM_APPLY: ${{ vars.ENABLE_TERRAFORM_APPLY }}
       AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -41,10 +131,6 @@ jobs:
           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_REF_NAME" != "homolog" ] && [ "$GITHUB_REF_NAME" != "main" ]; then
-            echo "::error::O deploy só pode ser executado a partir de homolog ou main."
-            exit 1
-          fi
           if [ "$ENABLE_TERRAFORM_APPLY" != "true" ]; then
             echo "::error::ENABLE_TERRAFORM_APPLY deve valer true no ambiente ${TARGET_ENVIRONMENT}."
             exit 1

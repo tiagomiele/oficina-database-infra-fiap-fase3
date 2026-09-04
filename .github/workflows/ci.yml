@@ -21,8 +21,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate GitHub Actions workflows
+        run: |
+          curl --retry 3 --retry-all-errors -fsSL \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
+            -o /tmp/actionlint.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          /tmp/actionlint
+
       - name: Validate documentation and ER diagram
         run: python3 scripts/validate_docs.py
+
+  terraform-validation:
+    name: Terraform validation
+    needs: repository-validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -31,7 +48,7 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Terraform init without remote backend
-        run: terraform init -backend=false -input=false
+        run: terraform init -backend=false -input=false -lockfile=readonly
 
       - name: Terraform validate
         run: terraform validate -no-color
@@ -74,7 +91,18 @@ jobs:
         uses: terraform-linters/setup-tflint@v4
 
       - name: TFLint
-        run: tflint --recursive
+        run: |
+          tflint --init
+          tflint --recursive
+
+  telemetry-validation:
+    name: RDS telemetry tests
+    needs: terraform-validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -83,6 +111,23 @@ jobs:
 
       - name: Test RDS telemetry collector
         run: python3 -m unittest tests/test_rds_newrelic_telemetry.py
+
+  security-validation:
+    name: Security validation
+    needs: telemetry-validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Checkov
         run: |
