@@ -134,7 +134,7 @@ Pelo GitHub Actions:
 - `workflow_dispatch` do deploy permite repetir o fluxo na branch correspondente durante bootstrap ou recuperação;
 - destroy não faz parte da esteira e permanece manual via Terraform CLI.
 
-A escrita no repositório Backend usa preferencialmente uma GitHub App instalada apenas em `oficina-backend-fiap-fase3`, com permissão **Environments: read and write**. Configure `SYNC_APP_ID` e `SYNC_APP_PRIVATE_KEY` uma única vez nas variables/secrets do repositório Database. `GITHUB_SYNC_TOKEN` permanece disponível somente como alternativa temporária de recuperação.
+A escrita no repositório Backend usa preferencialmente uma GitHub App instalada apenas em `oficina-backend-fiap-fase3`, com permissão **Environments: read and write**. Configure `SYNC_APP_CLIENT_ID` com o Client ID da GitHub App e `SYNC_APP_PRIVATE_KEY` com a chave privada, uma única vez nas variables/secrets do repositório Database. `GITHUB_SYNC_TOKEN` permanece disponível somente como alternativa temporária de recuperação.
 
 Pela CLI, com o workspace configurado:
 
