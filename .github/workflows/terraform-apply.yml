@@ -38,7 +38,7 @@ jobs:
         env:
           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
           GITHUB_SYNC_TOKEN: ${{ secrets.GITHUB_SYNC_TOKEN }}
-          SYNC_APP_ID: ${{ vars.SYNC_APP_ID }}
+          SYNC_APP_CLIENT_ID: ${{ vars.SYNC_APP_CLIENT_ID }}
           SYNC_APP_PRIVATE_KEY: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
         run: |
           set -euo pipefail
@@ -50,8 +50,8 @@ jobs:
           for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN TF_CLOUD_ORGANIZATION TF_WORKSPACE TF_API_TOKEN; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
-          if [ -z "$GITHUB_SYNC_TOKEN" ] && { [ -z "$SYNC_APP_ID" ] || [ -z "$SYNC_APP_PRIVATE_KEY" ]; }; then
-            missing+=("GITHUB_SYNC_TOKEN ou SYNC_APP_ID+SYNC_APP_PRIVATE_KEY")
+          if [ -z "$GITHUB_SYNC_TOKEN" ] && { [ -z "$SYNC_APP_CLIENT_ID" ] || [ -z "$SYNC_APP_PRIVATE_KEY" ]; }; then
+            missing+=("GITHUB_SYNC_TOKEN ou SYNC_APP_CLIENT_ID+SYNC_APP_PRIVATE_KEY")
           fi
           if [ "${#missing[@]}" -gt 0 ]; then
             printf '::error::Configuração de deploy incompleta: %s\n' "${missing[*]}"
@@ -93,10 +93,10 @@ jobs:
 
       - name: Generate GitHub App synchronization token
         id: sync-app-token
-        if: ${{ vars.SYNC_APP_ID != '' }}
-        uses: actions/create-github-app-token@v2
+        if: ${{ vars.SYNC_APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
-          app-id: ${{ vars.SYNC_APP_ID }}
+          client-id: ${{ vars.SYNC_APP_CLIENT_ID }}
           private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: oficina-backend-fiap-fase3
@@ -161,7 +161,7 @@ jobs:
         env:
           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
           GITHUB_SYNC_TOKEN: ${{ secrets.GITHUB_SYNC_TOKEN }}
-          SYNC_APP_ID: ${{ vars.SYNC_APP_ID }}
+          SYNC_APP_CLIENT_ID: ${{ vars.SYNC_APP_CLIENT_ID }}
           SYNC_APP_PRIVATE_KEY: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
         run: |
           set -euo pipefail
@@ -173,8 +173,8 @@ jobs:
           for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN TF_CLOUD_ORGANIZATION TF_WORKSPACE TF_API_TOKEN; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
-          if [ -z "$GITHUB_SYNC_TOKEN" ] && { [ -z "$SYNC_APP_ID" ] || [ -z "$SYNC_APP_PRIVATE_KEY" ]; }; then
-            missing+=("GITHUB_SYNC_TOKEN ou SYNC_APP_ID+SYNC_APP_PRIVATE_KEY")
+          if [ -z "$GITHUB_SYNC_TOKEN" ] && { [ -z "$SYNC_APP_CLIENT_ID" ] || [ -z "$SYNC_APP_PRIVATE_KEY" ]; }; then
+            missing+=("GITHUB_SYNC_TOKEN ou SYNC_APP_CLIENT_ID+SYNC_APP_PRIVATE_KEY")
           fi
           if [ "${#missing[@]}" -gt 0 ]; then
             printf '::error::Configuração de deploy incompleta: %s\n' "${missing[*]}"
@@ -202,10 +202,10 @@ jobs:
 
       - name: Generate GitHub App synchronization token
         id: sync-app-token
-        if: ${{ vars.SYNC_APP_ID != '' }}
-        uses: actions/create-github-app-token@v2
+        if: ${{ vars.SYNC_APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
-          app-id: ${{ vars.SYNC_APP_ID }}
+          client-id: ${{ vars.SYNC_APP_CLIENT_ID }}
           private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: oficina-backend-fiap-fase3
