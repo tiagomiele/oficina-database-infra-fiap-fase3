@@ -54,7 +54,7 @@ jobs:
             missing+=("GITHUB_SYNC_TOKEN ou SYNC_APP_ID+SYNC_APP_PRIVATE_KEY")
           fi
           if [ "${#missing[@]}" -gt 0 ]; then
-            printf '::error::Configuração incompleta do GitHub Environment: %s\n' "${missing[*]}"
+            printf '::error::Configuração de deploy incompleta: %s\n' "${missing[*]}"
             exit 1
           fi
 
@@ -177,7 +177,7 @@ jobs:
             missing+=("GITHUB_SYNC_TOKEN ou SYNC_APP_ID+SYNC_APP_PRIVATE_KEY")
           fi
           if [ "${#missing[@]}" -gt 0 ]; then
-            printf '::error::Configuração incompleta do GitHub Environment: %s\n' "${missing[*]}"
+            printf '::error::Configuração de deploy incompleta: %s\n' "${missing[*]}"
             exit 1
           fi
 

@@ -33,7 +33,7 @@ O script grava listas como HCL e `db_password` como sensível. Depois do apply d
 
 ## Integração com GitHub Actions
 
-O script central configura os GitHub Environments `homolog` e `production`, incluindo token HCP, credenciais AWS, nomes dos workspaces, região e `ENABLE_TERRAFORM_APPLY=true`. A sincronização com o Backend usa preferencialmente `SYNC_APP_ID` e `SYNC_APP_PRIVATE_KEY` de uma GitHub App instalada somente no repositório Backend, com permissão **Environments: read and write**. O secret `GITHUB_SYNC_TOKEN` é aceito apenas como alternativa temporária de recuperação.
+O script central configura os GitHub Environments `homolog` e `production`, incluindo token HCP, credenciais AWS, nomes dos workspaces, região e `ENABLE_TERRAFORM_APPLY=true`. A sincronização com o Backend usa preferencialmente `SYNC_APP_ID` e `SYNC_APP_PRIVATE_KEY`, configurados uma única vez no repositório Database, de uma GitHub App instalada somente no repositório Backend com permissão **Environments: read and write**. O secret `GITHUB_SYNC_TOKEN` é aceito apenas como alternativa temporária de recuperação.
 
 A proteção **Required reviewers** deve existir somente no GitHub Environment `production`. Os environments `homolog`, `homolog-plan` e `production-plan` não possuem aprovação manual.
 
