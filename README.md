@@ -119,7 +119,7 @@ python3 scripts/validate_docs.py
 
 O CI executa os mesmos passos, mais Trivy, Gitleaks, verificação dos nomes de variável
 dos `*.tfvars.example` e verificação de ausência de recurso IAM. Ele apresenta quatro
-jobs sequenciais: `Repository validation → Terraform validation → RDS telemetry tests → Security validation`. O CI **não** usa credencial AWS.
+jobs sequenciais: `Repository validation → Terraform validation → Database integration tests → Security validation`. O CI **não** usa credencial AWS.
 
 ## Plan, apply e destroy
 
@@ -127,11 +127,14 @@ Configure os workspaces conforme [`docs/hcp-terraform.md`](docs/hcp-terraform.md
 
 Pelo GitHub Actions:
 
-- Pull Requests para `homolog` ou `main` executam um plan remoto sem apply quando a infraestrutura muda;
-- merges em `homolog` exibem `Validate configuration and AWS → Terraform database → Deployment summary`, executando plan e apply sem aprovação manual;
-- merges em `main` preservam plan e apply em um único job, com uma única aprovação no GitHub Environment `production`;
-- `workflow_dispatch` permite repetir o apply na branch correspondente durante bootstrap ou recuperação;
+- Pull Requests para `homolog` ou `main` executam automaticamente um plan remoto sem apply quando a infraestrutura muda;
+- merges em `homolog` exibem `Validate configuration and AWS → Terraform database → Deployment summary`, executando `plan → apply → sincronização JDBC` sem aprovação manual;
+- merges em `main` executam o mesmo fluxo em um único job, com uma única aprovação no GitHub Environment `production`;
+- a sincronização atualiza `db_url` no workspace Auth e `APP_DB_URL`/`DEPLOY_ENABLED` no GitHub Environment do Backend;
+- `workflow_dispatch` do deploy permite repetir o fluxo na branch correspondente durante bootstrap ou recuperação;
 - destroy não faz parte da esteira e permanece manual via Terraform CLI.
+
+A escrita no repositório Backend usa preferencialmente uma GitHub App instalada apenas em `oficina-backend-fiap-fase3`, com permissão **Environments: read and write**. Configure `SYNC_APP_ID` e `SYNC_APP_PRIVATE_KEY` uma única vez nas variables/secrets do repositório Database. `GITHUB_SYNC_TOKEN` permanece disponível somente como alternativa temporária de recuperação.
 
 Pela CLI, com o workspace configurado:
 

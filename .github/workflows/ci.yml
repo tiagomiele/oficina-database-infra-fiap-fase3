@@ -96,7 +96,7 @@ jobs:
           tflint --recursive
 
   telemetry-validation:
-    name: RDS telemetry tests
+    name: Database integration tests
     needs: terraform-validation
     runs-on: ubuntu-latest
     permissions:
@@ -111,6 +111,9 @@ jobs:
 
       - name: Test RDS telemetry collector
         run: python3 -m unittest tests/test_rds_newrelic_telemetry.py
+
+      - name: Test database output synchronization
+        run: python3 -m unittest tests/test_sync_database_outputs.py
 
   security-validation:
     name: Security validation

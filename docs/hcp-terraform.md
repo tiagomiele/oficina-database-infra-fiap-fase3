@@ -29,29 +29,29 @@ cloudwatch_logs_retention_days  = 7
 performance_insights_enabled    = false
 ```
 
-O script grava listas como HCL e `db_password` como sensível. Não reutilize IDs depois de reset do AWS Academy; reexecute o script após o novo apply do Kubernetes.
+O script grava listas como HCL e `db_password` como sensível. Depois do apply do Kubernetes, o próprio workflow Kubernetes atualiza automaticamente os IDs de rede usados pelo Database.
 
 ## Integração com GitHub Actions
 
-O script central configura os GitHub Environments `homolog` e `production`, incluindo token HCP, credenciais AWS, nomes dos workspaces, região e `ENABLE_TERRAFORM_APPLY=true`.
+O script central configura os GitHub Environments `homolog` e `production`, incluindo token HCP, credenciais AWS, nomes dos workspaces, região e `ENABLE_TERRAFORM_APPLY=true`. A sincronização com o Backend usa preferencialmente `SYNC_APP_ID` e `SYNC_APP_PRIVATE_KEY`, configurados uma única vez no repositório Database, de uma GitHub App instalada somente no repositório Backend com permissão **Environments: read and write**. O secret `GITHUB_SYNC_TOKEN` é aceito apenas como alternativa temporária de recuperação.
 
 A proteção **Required reviewers** deve existir somente no GitHub Environment `production`. Os environments `homolog`, `homolog-plan` e `production-plan` não possuem aprovação manual.
 
-O workflow **Terraform plan** executa automaticamente em Pull Requests que alteram a infraestrutura e também pode ser iniciado manualmente. Ele seleciona o workspace pelo ambiente e envia o plan para execução remota no HCP Terraform, sem apply.
+O workflow **Terraform plan** executa automaticamente somente em Pull Requests que alteram a infraestrutura. Ele seleciona o workspace pela branch base e envia o plan para execução remota no HCP Terraform, sem apply.
 
-Merges em `homolog` apresentam três jobs sequenciais: validação da configuração e da sessão AWS → plan/apply do Terraform → resumo. Merges em `main` mantêm toda a execução em um único job e usam uma única aprovação no environment `production`. Em ambos os casos, o apply só prossegue quando `ENABLE_TERRAFORM_APPLY=true`. O HCP Terraform mantém Auto apply desativado.
+Merges em `homolog` apresentam três jobs sequenciais: validação da configuração e da sessão AWS → `plan → apply → sincronização JDBC` → resumo. Merges em `main` mantêm toda a execução em um único job e usam uma única aprovação no environment `production`. Após o apply, o workflow grava `db_url` como variável sensível no workspace Auth e atualiza `APP_DB_URL` e `DEPLOY_ENABLED` no Environment correspondente do Backend. Em ambos os casos, o apply só prossegue quando `ENABLE_TERRAFORM_APPLY=true`. O HCP Terraform mantém Auto apply desativado.
 
-O `workflow_dispatch` serve somente para repetir o apply durante bootstrap ou recuperação. Para homologação, selecione a branch `homolog`; para produção, selecione `main`. O workflow recusa outras branches. Destroy é executado manualmente pela CLI, com confirmação interativa.
+O `workflow_dispatch` do deploy serve somente para repetir o fluxo durante bootstrap ou recuperação. Para homologação, selecione a branch `homolog`; para produção, selecione `main`. O workflow recusa outras branches. Destroy é executado manualmente pela CLI, com confirmação interativa.
 
-O deploy roda o plan autoritativo antes do apply e imprime os outputs ao final. Racional no [ADR 0008](adr/0008-cicd-com-gate-de-apply.md).
+O deploy roda o plan autoritativo antes do apply, sincroniza os outputs e imprime o resumo no mesmo run. Racional no [ADR 0008](adr/0008-cicd-com-gate-de-apply.md).
 
 ## Ordem segura
 
-1. mantenha a sessão AWS Academy ativa e execute o script central;
-2. aplique o Kubernetes e reexecute o script para sincronizar os outputs;
-3. revise o plan do Pull Request;
-4. faça merge em `homolog` para plan e apply automáticos;
-5. reexecute o script central para propagar a URL JDBC;
+1. mantenha a sessão AWS Academy ativa e execute o script central uma vez para renovar as credenciais temporárias;
+2. aplique o Kubernetes; seu workflow sincroniza automaticamente os outputs de rede;
+3. revise o plan automático do Pull Request do Database;
+4. faça merge em `homolog`; um único run executa plan, apply e sincronização JDBC;
+5. confirme no resumo que Auth e Backend receberam o JDBC;
 6. colete as evidências de [`evidence-checklist.md`](evidence-checklist.md) antes de encerrar o laboratório;
 7. execute destroy manualmente via Terraform CLI quando necessário.
 
