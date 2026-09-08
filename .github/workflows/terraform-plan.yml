@@ -9,32 +9,21 @@ on:
       - 'lambda/**'
       - '*.tf'
       - '.terraform.lock.hcl'
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: Ambiente HCP Terraform
-        required: true
-        default: homolog
-        type: choice
-        options:
-          - homolog
-          - production
-
 concurrency:
-  group: terraform-plan-${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production' || 'homolog') || inputs.environment }}-${{ github.ref }}
+  group: terraform-plan-${{ github.base_ref == 'main' && 'production' || 'homolog' }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   plan:
-    name: Plan (${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production' || 'homolog') || inputs.environment }})
+    name: Plan (${{ github.base_ref == 'main' && 'production' || 'homolog' }})
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production-plan' || 'homolog-plan') || (inputs.environment == 'production' && 'production-plan' || 'homolog-plan') }}
+    environment: ${{ github.base_ref == 'main' && 'production-plan' || 'homolog-plan' }}
     permissions:
       contents: read
     env:
-      TARGET_ENVIRONMENT: ${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && 'production' || 'homolog') || inputs.environment }}
+      TARGET_ENVIRONMENT: ${{ github.base_ref == 'main' && 'production' || 'homolog' }}
       TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
-      TF_WORKSPACE: ${{ github.event_name == 'pull_request' && (github.base_ref == 'main' && vars.TF_WORKSPACE_PRODUCTION || vars.TF_WORKSPACE_HOMOLOG) || (inputs.environment == 'production' && vars.TF_WORKSPACE_PRODUCTION || vars.TF_WORKSPACE_HOMOLOG) }}
+      TF_WORKSPACE: ${{ github.base_ref == 'main' && vars.TF_WORKSPACE_PRODUCTION || vars.TF_WORKSPACE_HOMOLOG }}
     steps:
       - uses: actions/checkout@v4
 

@@ -37,6 +37,9 @@ jobs:
       - name: Validate branch and deployment configuration
         env:
           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          GITHUB_SYNC_TOKEN: ${{ secrets.GITHUB_SYNC_TOKEN }}
+          SYNC_APP_CLIENT_ID: ${{ vars.SYNC_APP_CLIENT_ID }}
+          SYNC_APP_PRIVATE_KEY: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           if [ "$ENABLE_TERRAFORM_APPLY" != "true" ]; then
@@ -47,8 +50,11 @@ jobs:
           for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN TF_CLOUD_ORGANIZATION TF_WORKSPACE TF_API_TOKEN; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
+          if [ -z "$GITHUB_SYNC_TOKEN" ] && { [ -z "$SYNC_APP_CLIENT_ID" ] || [ -z "$SYNC_APP_PRIVATE_KEY" ]; }; then
+            missing+=("GITHUB_SYNC_TOKEN ou SYNC_APP_CLIENT_ID+SYNC_APP_PRIVATE_KEY")
+          fi
           if [ "${#missing[@]}" -gt 0 ]; then
-            printf '::error::Configuração incompleta do GitHub Environment: %s\n' "${missing[*]}"
+            printf '::error::Configuração de deploy incompleta: %s\n' "${missing[*]}"
             exit 1
           fi
 
@@ -65,6 +71,7 @@ jobs:
     permissions:
       contents: read
     env:
+      TARGET_ENVIRONMENT: homolog
       TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
       TF_WORKSPACE: ${{ vars.TF_WORKSPACE_HOMOLOG }}
     steps:
@@ -83,6 +90,30 @@ jobs:
 
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve -no-color
+
+      - name: Generate GitHub App synchronization token
+        id: sync-app-token
+        if: ${{ vars.SYNC_APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ vars.SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: oficina-backend-fiap-fase3
+
+      - name: Sincronizar JDBC com Auth e Backend
+        env:
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          GITHUB_SYNC_TOKEN: ${{ steps.sync-app-token.outputs.token || secrets.GITHUB_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          terraform output -json > "$RUNNER_TEMP/database-outputs.json"
+          python3 scripts/sync-database-outputs.py \
+            --outputs-file "$RUNNER_TEMP/database-outputs.json" \
+            --organization "$TF_CLOUD_ORGANIZATION" \
+            --auth-workspace "oficina-auth-${TARGET_ENVIRONMENT}" \
+            --environment "$TARGET_ENVIRONMENT"
+          echo "- JDBC sincronizado com Auth e Backend" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Terraform outputs
         run: terraform output -no-color
@@ -129,6 +160,9 @@ jobs:
       - name: Validate branch and deployment configuration
         env:
           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          GITHUB_SYNC_TOKEN: ${{ secrets.GITHUB_SYNC_TOKEN }}
+          SYNC_APP_CLIENT_ID: ${{ vars.SYNC_APP_CLIENT_ID }}
+          SYNC_APP_PRIVATE_KEY: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           if [ "$ENABLE_TERRAFORM_APPLY" != "true" ]; then
@@ -139,8 +173,11 @@ jobs:
           for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN TF_CLOUD_ORGANIZATION TF_WORKSPACE TF_API_TOKEN; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
+          if [ -z "$GITHUB_SYNC_TOKEN" ] && { [ -z "$SYNC_APP_CLIENT_ID" ] || [ -z "$SYNC_APP_PRIVATE_KEY" ]; }; then
+            missing+=("GITHUB_SYNC_TOKEN ou SYNC_APP_CLIENT_ID+SYNC_APP_PRIVATE_KEY")
+          fi
           if [ "${#missing[@]}" -gt 0 ]; then
-            printf '::error::Configuração incompleta do GitHub Environment: %s\n' "${missing[*]}"
+            printf '::error::Configuração de deploy incompleta: %s\n' "${missing[*]}"
             exit 1
           fi
 
@@ -162,6 +199,30 @@ jobs:
 
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve -no-color
+
+      - name: Generate GitHub App synchronization token
+        id: sync-app-token
+        if: ${{ vars.SYNC_APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ vars.SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: oficina-backend-fiap-fase3
+
+      - name: Sincronizar JDBC com Auth e Backend
+        env:
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          GITHUB_SYNC_TOKEN: ${{ steps.sync-app-token.outputs.token || secrets.GITHUB_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          terraform output -json > "$RUNNER_TEMP/database-outputs.json"
+          python3 scripts/sync-database-outputs.py \
+            --outputs-file "$RUNNER_TEMP/database-outputs.json" \
+            --organization "$TF_CLOUD_ORGANIZATION" \
+            --auth-workspace "oficina-auth-${TARGET_ENVIRONMENT}" \
+            --environment "$TARGET_ENVIRONMENT"
+          echo "- JDBC sincronizado com Auth e Backend" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Terraform outputs
         run: terraform output -no-color
